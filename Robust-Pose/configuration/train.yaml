@@ -1,0 +1,59 @@
+model:
+  pretrained: ../core/RAFT/pretrained/raft-things.pth
+  iters: 12
+  dropout: 0.0
+  small: False
+  pose_scale: 1.0
+  lbgfs_iters: 100
+  use_weights: True
+  dbg: False
+
+data:
+  train:
+    type: Intuitive
+    basepath: ../data/StereoMIS
+    sequences:
+      - H1
+      - P1
+      - scared_dataset_2
+      - scared_dataset_3
+      - scared_dataset_6
+    step:
+      - 1
+      - 5
+    samples: 2000
+
+  val:
+    type: Intuitive
+    basepath: ../data/StereoMIS
+    sequences:
+      - scared_dataset_2
+      - scared_dataset_3
+      - scared_dataset_6
+    step: 1
+    samples: 80
+
+
+train:
+  batch_size: 8
+  learning_rate: 1.0e-5
+  weight_decay: 5.0e-5
+  epsilon: 1.0e-8
+  epochs: 100000
+  gamma: 0.8
+  grad_clip: 1.0
+  loss_weights:
+    pose: 1.0
+    2d: 0.0
+    3d: 0.0
+    flow: 0.0
+  add_noise: False
+  freeze_flow_steps: 1000000000000000000
+
+val:
+  batch_size: 10
+
+image_shape:
+  - 512
+  - 640
+depth_scale: 250
