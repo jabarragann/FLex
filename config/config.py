@@ -230,8 +230,9 @@ class Config:
     # Debug Mode
     debug_mode: bool = False
 
-    systems: System_Config = System_Config()
-    model: Model_Config = Model_Config()
-    data: Data_Config = Data_Config()
-    optim: Optim_Config = Optim_Config()
-    local: Local_Config = Local_Config()
+    systems: System_Config = field(default_factory=lambda :System_Config())
+    model: Model_Config = field(default_factory=lambda : Model_Config())
+    data: Data_Config = field(default_factory=lambda : Data_Config())
+    optim: Optim_Config = field(default_factory=lambda : Optim_Config())
+    local: Local_Config = field(default_factory=lambda : Local_Config())
+
