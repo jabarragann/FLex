@@ -46,7 +46,7 @@ model:
   contract: True
 
 data:
-  datadir: "./data/StereoMIS/P2_8_1"
+  datadir: "./data/StereoMIS_FLex/P2_8_1"
   dataset_name: "stereomis"
   scene_bbox_min: [-2.0, -2.0, -2.0]
   scene_bbox_max: [2.0, 2.0, 2.0]
