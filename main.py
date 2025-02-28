@@ -32,9 +32,11 @@ def render_test(cfg):
     
     if cfg.local_models:
         logfolder = os.path.dirname(cfg.systems.ckpt)
-        modelsdirectory = (cfg.systems.ckpt).split(".")[0] # A bit hacky --> TODO: make this easier
-        image_bounds = torch.load(modelsdirectory+"_image_bounds.th")
-        world2hexs = torch.load(modelsdirectory+"_world2hexs.th")
+        # modelsdirectory = (cfg.systems.ckpt).split(".")[0] # A bit hacky --> TODO: make this easier
+        modelsdirectory = cfg.systems.ckpt + "/" + cfg.expname
+
+        image_bounds = torch.load(modelsdirectory + "_image_bounds.th")
+        world2hexs = torch.load(modelsdirectory + "_world2hexs.th")
         if cfg.local.progressive_opt:
             poses_rot = torch.load(modelsdirectory+"_poses_rot.th")
             poses_t = torch.load(modelsdirectory+"_poses_t.th")
