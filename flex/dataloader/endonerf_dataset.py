@@ -1,15 +1,15 @@
+import copy
 import json
 import os
 import sys
 
 import numpy as np
+import tifffile as tiff
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 from tqdm import tqdm
-import tifffile as tiff
-import copy
 
 from .ray_utils import get_ray_directions_blender, get_rays, read_pfm
 
@@ -76,15 +76,15 @@ class EndoNeRFDataset(Dataset):
         self.root_dir = datadir
         self.split = split
         self.downsample = downsample
-        #self.img_wh = (int(800 / downsample), int(800 / downsample))
+        # self.img_wh = (int(800 / downsample), int(800 / downsample))
         self.is_stack = is_stack
         self.N_vis = N_vis  # evaluate images for every N_vis images
 
         self.time_scale = time_scale
         self.world_bound_scale = 1.1
 
-        self.near = cfg.data.near #0.01#2.0 # adjust
-        self.far = cfg.data.far #1.0#6.0 # adjust
+        self.near = cfg.data.near  # 0.01#2.0 # adjust
+        self.far = cfg.data.far  # 1.0#6.0 # adjust
         self.near_far = [self.near, self.far]
         self.cfg = cfg
 
@@ -141,9 +141,17 @@ class EndoNeRFDataset(Dataset):
         print("compute_bbox_by_cam_frustrm: start")
         xyz_min = torch.Tensor([np.inf, np.inf, np.inf])
         xyz_max = -xyz_min
-        if self.split=='test' or self.cfg.data.datasampler_type=="hierach" or self.is_stack:
-            rays_o = self.all_rays.reshape(self.all_rays.shape[0]*self.all_rays.shape[1],self.all_rays.shape[2])[:,0:3]
-            viewdirs = self.all_rays.reshape(self.all_rays.shape[0]*self.all_rays.shape[1],self.all_rays.shape[2])[:,3:6]
+        if (
+            self.split == "test"
+            or self.cfg.data.datasampler_type == "hierach"
+            or self.is_stack
+        ):
+            rays_o = self.all_rays.reshape(
+                self.all_rays.shape[0] * self.all_rays.shape[1], self.all_rays.shape[2]
+            )[:, 0:3]
+            viewdirs = self.all_rays.reshape(
+                self.all_rays.shape[0] * self.all_rays.shape[1], self.all_rays.shape[2]
+            )[:, 3:6]
         else:
             rays_o = self.all_rays[:, 0:3]
             viewdirs = self.all_rays[:, 3:6]
@@ -168,31 +176,36 @@ class EndoNeRFDataset(Dataset):
         with open(os.path.join(self.root_dir, f"transforms_{self.split}.json")) as f:
             self.meta = json.load(f)
 
-        '''
+        """
         self.focal = (
             0.5 * 800 / np.tan(0.5 * self.meta["camera_angle_x"])
         )  # original focal length
         self.focal *= (
             self.img_wh[0] / 800
         )  # modify focal length to match size self.img_wh
-        '''
+        """
         if self.cfg.model.localrf:
-            lower_idx = max(round(len(self.meta['frames'])*((0.03)*self.cfg.model.model_num-0.015)),0)
-            upper_idx = lower_idx + round(len(self.meta['frames'])*(0.03))
-            self.meta['frames'] = self.meta['frames'][lower_idx:upper_idx]
-            
+            lower_idx = max(
+                round(
+                    len(self.meta["frames"])
+                    * ((0.03) * self.cfg.model.model_num - 0.015)
+                ),
+                0,
+            )
+            upper_idx = lower_idx + round(len(self.meta["frames"]) * (0.03))
+            self.meta["frames"] = self.meta["frames"][lower_idx:upper_idx]
 
-        w, h = self.meta['w'], self.meta['h']
+        w, h = self.meta["w"], self.meta["h"]
         # fix img_wh dim:
         self.img_wh = (int(w), int(h))
-        #self.cx = self.meta['cx']/self.downsample
-        #self.cy = self.meta['cy']/self.downsample
-        self.cx = self.meta['cx']
-        self.cy = self.meta['cy']
+        # self.cx = self.meta['cx']/self.downsample
+        # self.cy = self.meta['cy']/self.downsample
+        self.cx = self.meta["cx"]
+        self.cy = self.meta["cy"]
         w, h = self.img_wh
-        #self.focal = self.meta['fl_x']/self.downsample
-        self.focal = self.meta['fl_x']
-        '''
+        # self.focal = self.meta['fl_x']/self.downsample
+        self.focal = self.meta["fl_x"]
+        """
         print(self.cx)
         print(self.meta['cx'])
         print(self.cy)
@@ -200,7 +213,7 @@ class EndoNeRFDataset(Dataset):
         print(w)
         print(h)
         sys.exit()
-        '''
+        """
         # ray directions for all pixels, same for all images (same H, W, focal)
         self.directions = get_ray_directions_blender(
             h, w, [self.focal, self.focal]
@@ -236,58 +249,75 @@ class EndoNeRFDataset(Dataset):
             image_path = os.path.join(self.root_dir, f"{frame['file_path']}.png")
             self.image_paths += [image_path]
             img = Image.open(image_path)
-            '''
+            """
             if self.downsample != 1.0:
                 img = img.resize(self.img_wh, Image.LANCZOS)
-            '''
+            """
             img = self.transform(img)  # (3, h, w)
             img = img.view(3, -1).permute(1, 0)  # (h*w, 3) RGB
-            '''
+            """
             img = img[:, :3] * img[:, -1:] + (
                 1 - img[:, -1:]
             )  # blend A to RGB, white background
-            '''
+            """
             self.all_rgbs += [img]
 
             # handling of depth files:
             if self.depth_data:
-                depth_file_path = frame['depth_file_path']
-                #self.depth_paths += [depth_file_path]
+                depth_file_path = frame["depth_file_path"]
+                # self.depth_paths += [depth_file_path]
                 depth = self.transform(Image.open(depth_file_path))
-                #depth = torch.tensor(raw_depth)
-                #del raw_depth
+                # depth = torch.tensor(raw_depth)
+                # del raw_depth
                 depth = depth.view(1, -1).permute(1, 0)  # (h*w, 1) Gray-scale
                 self.all_depths += [depth]
-                #print(depth.shape)
-                #print(depth_file_path)
-                #print(img.shape)
-                #print(image_path)
+                # print(depth.shape)
+                # print(depth_file_path)
+                # print(img.shape)
+                # print(image_path)
 
             if self.bpixel_mask_data:
-                bpixel_mask_path = os.path.join(os.path.split(self.root_dir)[0], "black_pixel_mask/mask.png")
+                bpixel_mask_path = os.path.join(
+                    os.path.split(self.root_dir)[0], "black_pixel_mask/mask.png"
+                )
                 self.bpixel_mask = self.transform(Image.open(bpixel_mask_path))
                 # set mask to binary by filtering out all pixels below 255
-                self.bpixel_mask = self.bpixel_mask >= 255/255
-                self.bpixel_mask = self.bpixel_mask.view(1, -1).permute(1, 0)  # (h*w, 1)
-                self.bpixel_mask = self.bpixel_mask.repeat(len(self.image_paths),1) # (num.images*h*w,1)
+                self.bpixel_mask = self.bpixel_mask >= 255 / 255
+                self.bpixel_mask = self.bpixel_mask.view(1, -1).permute(
+                    1, 0
+                )  # (h*w, 1)
+                self.bpixel_mask = self.bpixel_mask.repeat(
+                    len(self.image_paths), 1
+                )  # (num.images*h*w,1)
 
             if self.pixel_feat_data:
                 # pixel features
-                pixel_feat_path = frame['pixel_desc_path']
-                pixel_feat = np.load(pixel_feat_path)['arr_0'][:self.cfg.model.pixel_feat_dim, :]
+                pixel_feat_path = frame["pixel_desc_path"]
+                pixel_feat = np.load(pixel_feat_path)["arr_0"][
+                    : self.cfg.model.pixel_feat_dim, :
+                ]
                 pixel_feat_tensor = torch.tensor(pixel_feat)
-                del pixel_feat # save memory
-                pixel_feat_tensor = pixel_feat_tensor.view(self.cfg.model.pixel_feat_dim, -1).permute(1, 0)  # (h*w, self.cfg.pixel_feat_dim)
+                del pixel_feat  # save memory
+                pixel_feat_tensor = pixel_feat_tensor.view(
+                    self.cfg.model.pixel_feat_dim, -1
+                ).permute(
+                    1, 0
+                )  # (h*w, self.cfg.pixel_feat_dim)
                 self.all_pixel_feat += [pixel_feat_tensor]
 
                 # pixel feature mask
-                pixel_feat_mask_path = os.path.join(os.path.split(self.root_dir)[0], "descriptor-silk-mask.npz")
-                pixel_feat_mask_np = np.load(pixel_feat_mask_path)['arr_0']
+                pixel_feat_mask_path = os.path.join(
+                    os.path.split(self.root_dir)[0], "descriptor-silk-mask.npz"
+                )
+                pixel_feat_mask_np = np.load(pixel_feat_mask_path)["arr_0"]
                 self.pixel_feat_mask = torch.tensor(pixel_feat_mask_np)
-                del pixel_feat_mask_np # save memory
-                self.pixel_feat_mask = self.pixel_feat_mask.view(1, -1).permute(1, 0)  # (h*w, 1)
-                self.pixel_feat_mask = self.pixel_feat_mask.repeat(len(self.image_paths), 1)  # (num.images*h*w,1)
-
+                del pixel_feat_mask_np  # save memory
+                self.pixel_feat_mask = self.pixel_feat_mask.view(1, -1).permute(
+                    1, 0
+                )  # (h*w, 1)
+                self.pixel_feat_mask = self.pixel_feat_mask.repeat(
+                    len(self.image_paths), 1
+                )  # (num.images*h*w,1)
 
             rays_o, rays_d = get_rays(self.directions, c2w)  # Get rays, both (h*w, 3).
             self.all_rays += [torch.cat([rays_o, rays_d], 1)]  # (h*w, 6)
@@ -310,9 +340,7 @@ class EndoNeRFDataset(Dataset):
             )  # (len(self.meta['frames])*h*w, 3)
             self.all_times = torch.cat(self.all_times, 0)
             if self.depth_data:
-                self.all_depths = torch.cat(
-                    self.all_depths, 0
-                )
+                self.all_depths = torch.cat(self.all_depths, 0)
             if self.pixel_feat_data:
                 self.all_pixel_feat = torch.cat(
                     self.all_pixel_feat, 0
@@ -328,12 +356,10 @@ class EndoNeRFDataset(Dataset):
             self.all_times = torch.stack(self.all_times, 0)
             if self.depth_data:
                 self.all_depths = torch.stack(self.all_depths, 0).reshape(
-                -1, *self.img_wh[::-1], 1
-            )  # (len(self.meta['frames]),h,w,1)
-            if self.bpixel_mask_data:
-                self.bpixel_mask = self.bpixel_mask.reshape(
                     -1, *self.img_wh[::-1], 1
-                )
+                )  # (len(self.meta['frames]),h,w,1)
+            if self.bpixel_mask_data:
+                self.bpixel_mask = self.bpixel_mask.reshape(-1, *self.img_wh[::-1], 1)
             if self.pixel_feat_data:
                 self.all_pixel_feat = torch.stack(self.all_pixel_feat, 0).reshape(
                     -1, *self.img_wh[::-1], self.cfg.model.pixel_feat_dim
@@ -342,13 +368,10 @@ class EndoNeRFDataset(Dataset):
                     -1, *self.img_wh[::-1], 1
                 )
 
-        all_imgs = copy.deepcopy(self.all_rgbs.reshape(
-                -1, *self.img_wh[::-1], 3
-            ))
+        all_imgs = copy.deepcopy(self.all_rgbs.reshape(-1, *self.img_wh[::-1], 3))
 
         self.all_times = self.time_scale * (self.all_times * 2.0 - 1.0)
         self.global_mean_rgb = torch.mean(all_imgs, dim=0)
-        
 
     def define_transforms(self):
         self.transform = T.ToTensor()
@@ -405,12 +428,12 @@ class EndoNeRFDataset(Dataset):
             sample = {"rays": rays, "rgbs": img, "time": time}
 
         if self.depth_data:
-            sample['depths'] = self.all_depths[idx]
+            sample["depths"] = self.all_depths[idx]
         if self.bpixel_mask_data:
-            sample['bpixel_mask'] = self.bpixel_mask[idx]
+            sample["bpixel_mask"] = self.bpixel_mask[idx]
         if self.pixel_feat_data:
-            sample['pixel_feat'] = self.all_pixel_feat[idx]
-            sample['pixel_feat_mask'] = self.pixel_feat_mask[idx]
+            sample["pixel_feat"] = self.all_pixel_feat[idx]
+            sample["pixel_feat_mask"] = self.pixel_feat_mask[idx]
 
         return sample
 
@@ -451,22 +474,35 @@ class EndoNeRFDataset(Dataset):
 
         return out, self.random_times[idx_img]
 
-
-
     def get_new_pose_rays(self, pose, times, time):
-
         xs = list(np.zeros(times))
         ys = list(np.zeros(times))
         zs = list(np.zeros(times))
 
         rot_deg = 0.5
-        rxs = list(np.zeros(2)) + list(np.ones(2) * -rot_deg) + list(np.zeros(2)) + list(np.ones(2)*1.5*rot_deg) + list(np.zeros(2)) + list(np.ones(2)*-2*rot_deg) + list(np.ones(2)*1.5*rot_deg)
-        rys = list(np.ones(2) * rot_deg) + list(np.zeros(2)) + list(np.ones(2) * -1.5*rot_deg) + list(np.zeros(2)) + list(np.ones(2)*2*rot_deg) + list(np.zeros(2)) + list(np.ones(2)*-1.5*rot_deg)
+        rxs = (
+            list(np.zeros(2))
+            + list(np.ones(2) * -rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * 1.5 * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * -2 * rot_deg)
+            + list(np.ones(2) * 1.5 * rot_deg)
+        )
+        rys = (
+            list(np.ones(2) * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * -1.5 * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * 2 * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * -1.5 * rot_deg)
+        )
         rzs = list(np.zeros(times))
 
-        if times==0: # useful for simulating fixed pose for all timesteps
+        if times == 0:  # useful for simulating fixed pose for all timesteps
             rays_all = []  # initialize list to store [rays_o, rays_d]
-            poses = pose.reshape(1,pose.shape[0], pose.shape[1])
+            poses = pose.reshape(1, pose.shape[0], pose.shape[1])
             time_a = time
             for i in range(1):
                 c2w = torch.FloatTensor(poses[i])
@@ -477,27 +513,33 @@ class EndoNeRFDataset(Dataset):
         for i in range(times):
             # x, y, z, rx, ry, rz = ...
             x, y, z, rx, ry, rz = xs[i], 0, zs[i], rxs[i], rys[i], rzs[i]
-            c2w = np.array([[1, 0, 0, x],
-                            [0, 1, 0, y],
-                            [0, 0, 1, z],
-                            [0, 0, 0, 1]])
-            R_X = np.array([
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, np.cos(rx * 3.1415 / 180), -np.sin(rx * 3.1415 / 180), 0.0],
-                [0.0, np.sin(rx * 3.1415 / 180), np.cos(rx * 3.1415 / 180), 0.0],
-                [0.0, 0.0, 0.0, 1.0]])
+            c2w = np.array([[1, 0, 0, x], [0, 1, 0, y], [0, 0, 1, z], [0, 0, 0, 1]])
+            R_X = np.array(
+                [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, np.cos(rx * 3.1415 / 180), -np.sin(rx * 3.1415 / 180), 0.0],
+                    [0.0, np.sin(rx * 3.1415 / 180), np.cos(rx * 3.1415 / 180), 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
 
-            R_Y = np.array([
-                [np.cos(ry * 3.1415 / 180), 0.0, np.sin(ry * 3.1415 / 180), 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [-np.sin(ry * 3.1415 / 180), 0.0, np.cos(ry * 3.1415 / 180), 0.0],
-                [0.0, 0.0, 0.0, 1.0]])
+            R_Y = np.array(
+                [
+                    [np.cos(ry * 3.1415 / 180), 0.0, np.sin(ry * 3.1415 / 180), 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [-np.sin(ry * 3.1415 / 180), 0.0, np.cos(ry * 3.1415 / 180), 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
 
-            R_Z = np.array([
-                [np.cos(rz * 3.1415 / 180), -np.sin(rz * 3.1415 / 180), 0.0, 0.0],
-                [np.sin(rz * 3.1415 / 180), np.cos(rz * 3.1415 / 180), 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0]])
+            R_Z = np.array(
+                [
+                    [np.cos(rz * 3.1415 / 180), -np.sin(rz * 3.1415 / 180), 0.0, 0.0],
+                    [np.sin(rz * 3.1415 / 180), np.cos(rz * 3.1415 / 180), 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
 
             if i == 0:
                 pose = pose.detach().cpu().numpy()
@@ -506,10 +548,14 @@ class EndoNeRFDataset(Dataset):
 
             new_time = time + (i + 1) * 0.00001
 
-            new_pose = new_pose.reshape(1, new_pose.shape[0], new_pose.shape[1])#[:, :3]
+            new_pose = new_pose.reshape(
+                1, new_pose.shape[0], new_pose.shape[1]
+            )  # [:, :3]
 
             if i == 0:
-                poses = np.concatenate((pose.reshape(1, pose.shape[0], pose.shape[1]), new_pose))
+                poses = np.concatenate(
+                    (pose.reshape(1, pose.shape[0], pose.shape[1]), new_pose)
+                )
                 time_a = np.concatenate((time, new_time))
                 time = new_time
                 pose = new_pose[0]

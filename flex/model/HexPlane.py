@@ -1,6 +1,7 @@
+import sys
+
 import torch
 from torch.nn import functional as F
-import sys
 
 from flex.model.HexPlane_Base import HexPlane_Base
 
@@ -228,7 +229,7 @@ class HexPlane(HexPlane_Base):
             inter = inter.view(-1, inter.shape[-1])
         else:
             raise NotImplementedError("no such fusion type")
-        
+
         inter = self.density_basis_mat(inter.T)  # Feature Projection
 
         return inter
@@ -321,7 +322,6 @@ class HexPlane(HexPlane_Base):
         inter = self.app_basis_mat(inter.T)  # Feature Projection
 
         return inter
-
 
     def TV_loss_density(self, reg, reg2=None):
         total = 0

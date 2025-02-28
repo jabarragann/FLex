@@ -1,15 +1,15 @@
+import copy
+import sys
 import time
 from typing import List, Optional, Tuple, Union
-import sys
 
 import torch
 import torch.nn
 from torch.nn import functional as F
-import copy
 
+from flex.dataloader.ray_utils import contract
 from flex.model.mlp import General_MLP, MLPRender_Fea_late_view
 from flex.model.sh import eval_sh_bases
-from flex.dataloader.ray_utils import contract
 
 
 def raw2alpha(sigma: torch.Tensor, dist: torch.Tensor) -> torch.Tensor:
@@ -81,7 +81,7 @@ class EmptyGridMask(torch.nn.Module):
         return empty_vals
 
     def normalize_coord(self, xyz_sampled):
-        return (xyz_sampled-self.aabb[0]) * self.invgridSize - 1
+        return (xyz_sampled - self.aabb[0]) * self.invgridSize - 1
 
 
 class HexPlane_Base(torch.nn.Module):
@@ -281,14 +281,13 @@ class HexPlane_Base(torch.nn.Module):
                 n_layers,
                 use_sigmoid=True,
                 zero_init=True,
-                #barf_c2f=self.barf_c2f,
+                # barf_c2f=self.barf_c2f,
             ).to(device)
         else:
             raise NotImplementedError("No such App Regression Mode")
         print("APP REGRESSOR:")
         print(self.app_regressor)
         print("pos_pe", pos_pe, "view_pe", view_pe, "fea_pe", fea_pe)
-
 
     def update_stepSize(self, gridSize):
         print("aabb", self.aabb.view(-1))
@@ -333,7 +332,6 @@ class HexPlane_Base(torch.nn.Module):
         else:
             raise NotImplementedError("No such activation function for density feature")
 
-
     def sample_rays(
         self,
         rays_o: torch.Tensor,
@@ -367,13 +365,13 @@ class HexPlane_Base(torch.nn.Module):
         )
         return rays_pts, interpx, ~mask_outbbox
 
-
     def sample_ray_contracted(self, rays_o, rays_d, is_train=True, N_samples=-1):
         N_samples = N_samples if N_samples > 0 else self.nSamples
         N_samples = N_samples // 6
 
         t_vals = (
-            torch.linspace(0.0, N_samples - 1, N_samples, device=rays_o.device)[None] / N_samples
+            torch.linspace(0.0, N_samples - 1, N_samples, device=rays_o.device)[None]
+            / N_samples
         )
 
         interpx = t_vals.clone()
@@ -382,18 +380,17 @@ class HexPlane_Base(torch.nn.Module):
             interpx += torch.rand_like(t_vals) / N_samples
             t_vals += torch.rand_like(t_vals) / N_samples
 
-        near, far = [1, 1e3] #[1, 10] #[1, 1e3]
+        near, far = [1, 1e3]  # [1, 10] #[1, 1e3]
         interpx = torch.cat(
             [interpx, 1.0 / (1.0 / near * (1.0 - t_vals) + 1.0 / far * t_vals)], dim=1
         )
         interpx += 1e-1
         rays_pts = rays_o[..., None, :] + rays_d[..., None, :] * interpx[..., None]
-        
+
         rays_pts = contract(rays_pts)
-        
+
         mask_outbbox = torch.zeros_like(rays_pts[..., 0]) > 0
         return rays_pts, interpx, ~mask_outbbox
-
 
     @torch.no_grad()
     def filtering_rays(
@@ -486,7 +483,6 @@ class HexPlane_Base(torch.nn.Module):
         ndc_ray: bool = False,
         N_samples: int = -1,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-
         """
         Forward pass of the HexPlane.
 
@@ -509,29 +505,28 @@ class HexPlane_Base(torch.nn.Module):
 
         rays_norm = torch.norm(viewdirs, dim=-1, keepdim=True)
         viewdirs = viewdirs / rays_norm
-        
+
         if self.contract:
             xyz_sampled, z_vals, ray_valid = self.sample_ray_contracted(
-            rays_chunk[:, :3], viewdirs, is_train=is_train, N_samples=N_samples
+                rays_chunk[:, :3], viewdirs, is_train=is_train, N_samples=N_samples
             )
         else:
             xyz_sampled, z_vals, ray_valid = self.sample_rays(
                 rays_chunk[:, :3], viewdirs, is_train=is_train, N_samples=N_samples
             )
-        
+
         dists = torch.cat(
             (z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1
         )
-        #rays_norm = torch.norm(viewdirs, dim=-1, keepdim=True)
+        # rays_norm = torch.norm(viewdirs, dim=-1, keepdim=True)
         if ndc_ray:
             dists = dists * rays_norm
-        #viewdirs = viewdirs / rays_norm
+        # viewdirs = viewdirs / rays_norm
 
         viewdirs = viewdirs.view(-1, 1, 3).expand(xyz_sampled.shape)
         frame_time = frame_time.view(-1, 1, 1).expand(
             xyz_sampled.shape[0], xyz_sampled.shape[1], 1
         )
-        
 
         # If emptiness mask is availabe, we first filter out rays with low opacities.
         if self.emptyMask is not None:
@@ -542,7 +537,7 @@ class HexPlane_Base(torch.nn.Module):
             ray_valid = ~ray_invalid
 
         # Normalize coordinates.
-        #xyz_sampled_unnorm = copy.deepcopy(xyz_sampled) #cannot be used when optimising for poses
+        # xyz_sampled_unnorm = copy.deepcopy(xyz_sampled) #cannot be used when optimising for poses
         xyz_sampled = self.normalize_coord(xyz_sampled)
 
         # Initialize sigma and rgb values.
@@ -575,7 +570,9 @@ class HexPlane_Base(torch.nn.Module):
             # continue computing rgb
             valid_rgbs = self.app_regressor(
                 xyz_sampled[app_mask],
-                viewdirs[app_mask].clone().detach(), # to ensure viewdirs does not contribute to pose optim.
+                viewdirs[app_mask]
+                .clone()
+                .detach(),  # to ensure viewdirs does not contribute to pose optim.
                 app_features,
                 frame_time[app_mask],
             )
@@ -606,7 +603,6 @@ class HexPlane_Base(torch.nn.Module):
 
         return rgb_map, depth_map, alpha, z_vals, xyz_sampled, weight
 
-
     @torch.no_grad()
     def updateEmptyMask(self, gridSize=(200, 200, 200), time_grid=64):
         """
@@ -631,11 +627,9 @@ class HexPlane_Base(torch.nn.Module):
         emptiness[emptiness < self.emptyMask_thres] = 0
 
         self.emptyMask = EmptyGridMask(self.device, self.aabb, emptiness)
-        print(f"emptiness rest %%%f"%(torch.sum(emptiness)/total_voxels*100))
+        print(f"emptiness rest %%%f" % (torch.sum(emptiness) / total_voxels * 100))
 
         return None
-
-
 
     @torch.no_grad()
     def getDenseEmpty(self, gridSize=None, time_grid=None):
@@ -654,8 +648,8 @@ class HexPlane_Base(torch.nn.Module):
             ),
             -1,
         ).to(self.device)
-        #dense_xyz = samples * 2.0 - 1.0
-        dense_xyz = self.aabb[0] * (1-samples) + self.aabb[1] * samples
+        # dense_xyz = samples * 2.0 - 1.0
+        dense_xyz = self.aabb[0] * (1 - samples) + self.aabb[1] * samples
         emptiness = torch.zeros_like(dense_xyz[..., 0])
         for i in range(gridSize[0]):
             emptiness[i] = self.compute_emptiness(
@@ -676,9 +670,8 @@ class HexPlane_Base(torch.nn.Module):
 
         sigma = torch.zeros(xyz_locs.shape[:-1], device=xyz_locs.device)
 
-
         if empty_mask.any():
-            #xyz_sampled = xyz_locs[empty_mask]
+            # xyz_sampled = xyz_locs[empty_mask]
             xyz_sampled = self.normalize_coord(xyz_locs[empty_mask])
             time_samples = torch.linspace(-1, 1, time_grid).to(xyz_sampled.device)
             N, T = xyz_sampled.shape[0], time_samples.shape[0]

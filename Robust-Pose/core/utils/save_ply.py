@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def save_ply(pts: np.ndarray, rgb: np.ndarray, file_path: str = './depth.ply') -> bool:
+def save_ply(pts: np.ndarray, rgb: np.ndarray, file_path: str = "./depth.ply") -> bool:
     """
     Creates an ASCII text file containing a point cloud which is in line with the Polygon File Format (PLY).
     See https://en.wikipedia.org/wiki/PLY_(file_format) for further information.

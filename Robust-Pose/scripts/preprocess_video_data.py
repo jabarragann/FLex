@@ -1,12 +1,14 @@
 import sys
-sys.path.append('../')
+
+sys.path.append("../")
 import os
-import torch
-import numpy as np
-from tqdm import tqdm
-from dataset.dataset_utils import get_data, StereoVideoDataset
-from torch.utils.data import DataLoader
+
 import cv2
+import numpy as np
+import torch
+from dataset.dataset_utils import StereoVideoDataset, get_data
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 
 def _check_valid(valid_list, n):
@@ -21,18 +23,21 @@ def _check_valid(valid_list, n):
 
 def main(input_path, output_path, step, rect_mode):
     # only extract valid frames for training
-    if os.path.isfile(os.path.join(input_path, 'train_split.csv')):
-        valid_list = np.genfromtxt(os.path.join(input_path, 'train_split.csv'), skip_header=1, delimiter=',')
+    if os.path.isfile(os.path.join(input_path, "train_split.csv")):
+        valid_list = np.genfromtxt(
+            os.path.join(input_path, "train_split.csv"), skip_header=1, delimiter=","
+        )
     else:
         valid_list = None
 
-    dataset, calib = get_data(input_path, (640, 512), sample_video=step, rect_mode=rect_mode)
+    dataset, calib = get_data(
+        input_path, (640, 512), sample_video=step, rect_mode=rect_mode
+    )
     assert isinstance(dataset, StereoVideoDataset)
-
 
     loader = DataLoader(dataset, num_workers=1)
 
-    os.makedirs(os.path.join(output_path, 'video_frames'), exist_ok=True)
+    os.makedirs(os.path.join(output_path, "video_frames"), exist_ok=True)
 
     with torch.inference_mode():
         for i, data in enumerate(tqdm(loader, total=len(dataset))):
@@ -41,55 +46,74 @@ def main(input_path, output_path, step, rect_mode):
             if _check_valid(valid_list, int(img_number[0])):
                 # store images and depth and mask
                 if torch.is_tensor(img_number):
-                    img_name = f'{img_number.item():06d}'
+                    img_name = f"{img_number.item():06d}"
                 else:
-                    img_name = f'{int(img_number[0]):06d}'
-                cv2.imwrite(os.path.join(output_path, 'video_frames', img_name+'l.png'),
-                            cv2.cvtColor(limg.squeeze().permute(1,2,0).cpu().numpy(), cv2.COLOR_RGB2BGR).astype(np.uint8))
-                cv2.imwrite(os.path.join(output_path, 'video_frames', img_name + 'r.png'),
-                            cv2.cvtColor(rimg.squeeze().permute(1,2,0).cpu().numpy(), cv2.COLOR_RGB2BGR).astype(np.uint8))
-        print('finished')
+                    img_name = f"{int(img_number[0]):06d}"
+                cv2.imwrite(
+                    os.path.join(output_path, "video_frames", img_name + "l.png"),
+                    cv2.cvtColor(
+                        limg.squeeze().permute(1, 2, 0).cpu().numpy(), cv2.COLOR_RGB2BGR
+                    ).astype(np.uint8),
+                )
+                cv2.imwrite(
+                    os.path.join(output_path, "video_frames", img_name + "r.png"),
+                    cv2.cvtColor(
+                        rimg.squeeze().permute(1, 2, 0).cpu().numpy(), cv2.COLOR_RGB2BGR
+                    ).astype(np.uint8),
+                )
+        print("finished")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description='script to extract stereo data')
 
+    parser = argparse.ArgumentParser(description="script to extract stereo data")
+
+    parser.add_argument("input", type=str, help="Path to input folder.")
     parser.add_argument(
-        'input',
+        "--outpath",
         type=str,
-        help='Path to input folder.'
+        help="Path to output folder. If not provided use input path instead.",
     )
     parser.add_argument(
-        '--outpath',
+        "--rect_mode",
         type=str,
-        help='Path to output folder. If not provided use input path instead.'
-    )
-    parser.add_argument(
-        '--rect_mode',
-        type=str,
-        choices=['conventional', 'pseudo'],
-        default='conventional',
-        help='rectification mode, use pseudo for SCARED'
+        choices=["conventional", "pseudo"],
+        default="conventional",
+        help="rectification mode, use pseudo for SCARED",
     )
     args = parser.parse_args()
     ## hack file folder
     print(os.getcwd())
-    print(os.path.split(os.path.split(os.path.split(os.path.split(os.getcwd())[0])[0])[0])[0])
-    #root = os.path.split(os.path.split(os.path.split(os.path.split(os.getcwd())[0])[0])[0])[0]
+    print(
+        os.path.split(
+            os.path.split(os.path.split(os.path.split(os.getcwd())[0])[0])[0]
+        )[0]
+    )
+    # root = os.path.split(os.path.split(os.path.split(os.path.split(os.getcwd())[0])[0])[0])[0]
     root = os.path.split(os.path.split(os.getcwd())[0])[0]
     basedir = os.path.join(root, args.input)
     args.input = basedir
     if args.outpath is None:
         args.outpath = args.input
     ####################
-    
-    datasets = np.genfromtxt(os.path.join(args.input, 'sequences.txt'), skip_header=1, delimiter=',', dtype=str)
+
+    datasets = np.genfromtxt(
+        os.path.join(args.input, "sequences.txt"),
+        skip_header=1,
+        delimiter=",",
+        dtype=str,
+    )
     datasets = datasets[None, ...] if datasets.shape == (2,) else datasets
     for d in datasets:
-        print(f'extract {d[0]}')
+        print(f"extract {d[0]}")
         try:
-            main(os.path.join(args.input, d[0]), os.path.join(args.outpath, d[0]), 1, args.rect_mode)
+            main(
+                os.path.join(args.input, d[0]),
+                os.path.join(args.outpath, d[0]),
+                1,
+                args.rect_mode,
+            )
         except IndexError:
             pass
         except AssertionError:

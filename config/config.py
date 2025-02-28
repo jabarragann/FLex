@@ -11,7 +11,7 @@ class System_Config:
     vis_every: int = 10000
     save_ckpt_every: int = 10000
     add_timestamp: bool = True
-    localrf2_ckpt: str = 'logs/localrf_test_2/miti_23.th'
+    localrf2_ckpt: str = "logs/localrf_test_2/miti_23.th"
 
 
 @dataclass
@@ -20,7 +20,9 @@ class Model_Config:
     N_voxel_init: int = 64 * 64 * 64  # initial voxel number
     N_voxel_final: int = 200 * 200 * 200  # final voxel number
     step_ratio: float = 0.5
-    nonsquare_voxel: bool = True  # if yes, voxel numbers along each axis depend on scene length along each axis
+    nonsquare_voxel: bool = (
+        True  # if yes, voxel numbers along each axis depend on scene length along each axis
+    )
     time_grid_init: int = 16
     time_grid_final: int = 128
     normalize_type: str = "normal"
@@ -70,11 +72,11 @@ class Model_Config:
     no_emptyMask: bool = False
 
     # Reg
-    rgb_loss_weight: float = 1.0 #3.0 DynamicNeRF #1.0 HexPlane
+    rgb_loss_weight: float = 1.0  # 3.0 DynamicNeRF #1.0 HexPlane
     random_background: bool = False
     depth_loss: bool = True
-    urf_depth_loss_weight: float = 0.0 # urban radiance field depth loss
-    optical_flow_loss_weight: float = 1.0 # loss weight of optical flow supervision
+    urf_depth_loss_weight: float = 0.0  # urban radiance field depth loss
+    optical_flow_loss_weight: float = 1.0  # loss weight of optical flow supervision
 
     TV_t_s_ratio: float = 2.0  # ratio of TV loss along temporal and spatial dimensions
     TV_weight_density: float = 0.0001
@@ -93,13 +95,17 @@ class Model_Config:
 
     # Flow
     predict_flow: bool = False
-    opt_from_depth: bool = True # induce optical flow from predicted depth only --> no scene flow required!
+    opt_from_depth: bool = (
+        True  # induce optical flow from predicted depth only --> no scene flow required!
+    )
 
     # pose optim
-    barf_c2f: List[float] = field(default_factory=lambda: [0.0, 0.0]) # in SPARF [0.4,0.7] # for activating PE when optimising for poses
+    barf_c2f: List[float] = field(
+        default_factory=lambda: [0.0, 0.0]
+    )  # in SPARF [0.4,0.7] # for activating PE when optimising for poses
 
     # Contract scene
-    contract: bool = False # contract scene
+    contract: bool = False  # contract scene
 
 
 @dataclass
@@ -113,12 +119,12 @@ class Data_Config:
     scene_bbox_min: List[float] = field(default_factory=lambda: [-1.0, -1.0, -1.0])
     scene_bbox_max: List[float] = field(default_factory=lambda: [1.0, 1.0, 1.0])
     N_random_pose: int = 1000
-    near: float = 0.01 # near plane for ray sampling
-    far: float = 1.0 # far plane for ray sampling
-    depth_data: bool = True # using depth supervision
-    flow_data : bool = False # provide optical flow data from RAFT
-    tool_mask: bool = False # provide surgical tool mask
-    use_ndc: bool = False # map rays into NDC space
+    near: float = 0.01  # near plane for ray sampling
+    far: float = 1.0  # far plane for ray sampling
+    depth_data: bool = True  # using depth supervision
+    flow_data: bool = False  # provide optical flow data from RAFT
+    tool_mask: bool = False  # provide surgical tool mask
+    use_ndc: bool = False  # map rays into NDC space
 
     # for dnerf
 
@@ -160,35 +166,40 @@ class Optim_Config:
 
     batch_size: int = 4096
     n_iters: int = 25000
-    num_s_imgs: int = 1 # number of images in each batch
+    num_s_imgs: int = 1  # number of images in each batch
 
     # Pose optimization
     optimize_poses: bool = False
-    lr_R_init: float = 5e-3 # initial lr for pose rotation
-    lr_T_init: float = 5e-4 # initial lr for pose translation
+    lr_R_init: float = 5e-3  # initial lr for pose rotation
+    lr_T_init: float = 5e-4  # initial lr for pose translation
 
     # Optical flow
-    temp_decline: int = 10 # equivalent to reducing flow loss weight by 10 every 10% of training setting it to 5 will reduced loss weight every 20% --> set to 1 when not reducing at all
-    
+    temp_decline: int = (
+        10  # equivalent to reducing flow loss weight by 10 every 10% of training setting it to 5 will reduced loss weight every 20% --> set to 1 when not reducing at all
+    )
+
     # Cyclic LR scheduler
     cyc_step_size: int = 25000
     cyc_gamma: float = 0.99
-    cyc_mode: str = "triangular" # options: "triangular" or "triangular2" or "exp_range
-
+    cyc_mode: str = "triangular"  # options: "triangular" or "triangular2" or "exp_range
 
 
 @dataclass
 class Local_Config:
     # LocalHex settings
-    n_max_frames: int = 100 # max amount of frames per model
-    n_overlap: int = 30 # max frames overlap between models
-    max_drift: float = 1.0 # min distance between poses for generating new model
-    angle_threshold: float = 10.0 # min angle between poses for generating new model
-    progressive_opt: bool = False # no prepartitioning of models but train on the fly
-    n_init_frames: int = 5 # initial amount of frames for progressive optimization per model
-    add_frames_every: int = 100 # iterations before adding new frame
-    use_preprocessed_poses: bool = True # use preprocessed poses else start from identity pose
-    use_camera_momentum: bool = False # use last camera change to initialize new pose
+    n_max_frames: int = 100  # max amount of frames per model
+    n_overlap: int = 30  # max frames overlap between models
+    max_drift: float = 1.0  # min distance between poses for generating new model
+    angle_threshold: float = 10.0  # min angle between poses for generating new model
+    progressive_opt: bool = False  # no prepartitioning of models but train on the fly
+    n_init_frames: int = (
+        5  # initial amount of frames for progressive optimization per model
+    )
+    add_frames_every: int = 100  # iterations before adding new frame
+    use_preprocessed_poses: bool = (
+        True  # use preprocessed poses else start from identity pose
+    )
+    use_camera_momentum: bool = False  # use last camera change to initialize new pose
 
 
 @dataclass
@@ -203,36 +214,53 @@ class Config:
     render_new_poses: bool = False
     new_pose_file: str = "test_poses.freiburg"
 
-    render_extra: bool = False # render novel views different to train/test views
-    original_pose: bool = False # keep pose from specific scene for all timesteps
-    num_scene: int = 0 # test view from which to pick the original pose
-    render_extra_repeats: int = 14 # number of different poses for each timestep
-    img_limit: int = 200 # number of original images from test dataset to render for in render_extra if bigger than len(dataset) take full test dataset
-    eval_every_img: int = 1 # indicates which img idxs are evaluated for e.g. when this is 1 then every test img is selected if it is 5 every fifth test image is selected
+    render_extra: bool = False  # render novel views different to train/test views
+    original_pose: bool = False  # keep pose from specific scene for all timesteps
+    num_scene: int = 0  # test view from which to pick the original pose
+    render_extra_repeats: int = 14  # number of different poses for each timestep
+    img_limit: int = (
+        200  # number of original images from test dataset to render for in render_extra if bigger than len(dataset) take full test dataset
+    )
+    eval_every_img: int = (
+        1  # indicates which img idxs are evaluated for e.g. when this is 1 then every test img is selected if it is 5 every fifth test image is selected
+    )
 
-    create_pc: bool = False # create pc's from model rgb and depth predictions
-    pc_test_idx: List[int] = field(default_factory=lambda: [0]) # scene numbers for which to create pc's
-    pc_icp: bool = False # run icp algorithm on predicted pc and gt pc
-    compute_pc_cd: bool = False # compute L1-depth loss on estimated depth for test views 
+    create_pc: bool = False  # create pc's from model rgb and depth predictions
+    pc_test_idx: List[int] = field(
+        default_factory=lambda: [0]
+    )  # scene numbers for which to create pc's
+    pc_icp: bool = False  # run icp algorithm on predicted pc and gt pc
+    compute_pc_cd: bool = (
+        False  # compute L1-depth loss on estimated depth for test views
+    )
 
-    test_weights: bool = False # plot density weights distribution across several timesteps 
+    test_weights: bool = (
+        False  # plot density weights distribution across several timesteps
+    )
     test_view: int = 10
-    ray_idxs: List[int] = field(default_factory=lambda: [10000, 20000, 50000, 90000, 120000])
+    ray_idxs: List[int] = field(
+        default_factory=lambda: [10000, 20000, 50000, 90000, 120000]
+    )
 
-    visualize_4d_vol: bool = False # visualize ground truth 4d volume avg and variance per ray only
-    vis_occupancy: bool = False # visualize ocpacity std along each ray from model opacity predictions based on 4d volume 
+    visualize_4d_vol: bool = (
+        False  # visualize ground truth 4d volume avg and variance per ray only
+    )
+    vis_occupancy: bool = (
+        False  # visualize ocpacity std along each ray from model opacity predictions based on 4d volume
+    )
 
     only_pose_metrics: bool = False
 
     # local models
-    local_models: bool = False # split scene into smaller segments and train one model each
+    local_models: bool = (
+        False  # split scene into smaller segments and train one model each
+    )
 
     # Debug Mode
     debug_mode: bool = False
 
-    systems: System_Config = field(default_factory=lambda :System_Config())
-    model: Model_Config = field(default_factory=lambda : Model_Config())
-    data: Data_Config = field(default_factory=lambda : Data_Config())
-    optim: Optim_Config = field(default_factory=lambda : Optim_Config())
-    local: Local_Config = field(default_factory=lambda : Local_Config())
-
+    systems: System_Config = field(default_factory=lambda: System_Config())
+    model: Model_Config = field(default_factory=lambda: Model_Config())
+    data: Data_Config = field(default_factory=lambda: Data_Config())
+    optim: Optim_Config = field(default_factory=lambda: Optim_Config())
+    local: Local_Config = field(default_factory=lambda: Local_Config())

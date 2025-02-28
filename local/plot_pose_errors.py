@@ -1,28 +1,28 @@
-import sys
-import os
-import matplotlib.pyplot as plt
 import json
+import os
+import sys
+
+import matplotlib.pyplot as plt
 
 
 def plot_errors(folders, datadir):
-
-    colors = ['g', 'r', 'y', 'b']
+    colors = ["g", "r", "y", "b"]
     x, rpe_trans1, rpe_rot1, rpe_trans2, rpe_rot2 = [], [], [], [], []
     # rpe trans error
     fig, ax = plt.subplots()
-    with open(f"{folders[0]}/end_pose_error_raw.txt", "r") as f:
+    with open(f"{folders[0]}/end_pose_error_raw.txt") as f:
         lines = f.readlines()
     clean_lines = [x.strip() for x in lines]
-    for j in range (len(clean_lines)):
-        elements = clean_lines[j].split(',')
+    for j in range(len(clean_lines)):
+        elements = clean_lines[j].split(",")
         x.append(int(elements[0]))
         rpe_trans1.append(float(elements[1]))
         rpe_rot1.append(float(elements[2]))
-    with open(f"{folders[1]}/end_pose_error_raw.txt", "r") as f:
+    with open(f"{folders[1]}/end_pose_error_raw.txt") as f:
         lines = f.readlines()
     clean_lines = [x.strip() for x in lines]
-    for j in range (len(clean_lines)):
-        elements = clean_lines[j].split(',')
+    for j in range(len(clean_lines)):
+        elements = clean_lines[j].split(",")
         rpe_trans2.append(float(elements[1]))
         rpe_rot2.append(float(elements[2]))
 
@@ -33,27 +33,29 @@ def plot_errors(folders, datadir):
     # is omitted, 'solid' is used.
     # See `matplotlib.collections.LineCollection` for more information.
     scene = os.path.split(datadir)[-1]
-    ax.set_title('Trans Errors')
-    ax.plot(x, rpe_trans1, colors[0]+'o--', linewidth=2, markersize=1, label="FLex")
-    ax.plot(x, rpe_trans2, colors[1]+'o--', linewidth=2, markersize=1, label="Robust-Pose")
+    ax.set_title("Trans Errors")
+    ax.plot(x, rpe_trans1, colors[0] + "o--", linewidth=2, markersize=1, label="FLex")
+    ax.plot(
+        x, rpe_trans2, colors[1] + "o--", linewidth=2, markersize=1, label="Robust-Pose"
+    )
     ax.legend()
-    fig.savefig(os.path.join(scene+'_trans_error_plot.pdf'))
+    fig.savefig(os.path.join(scene + "_trans_error_plot.pdf"))
     # rpe rot error
     fig, ax = plt.subplots()
     ax.set_title("Rot Errors")
-    ax.plot(x, rpe_rot1, colors[0]+'o--', linewidth=2, markersize=1, label="FLex")
-    ax.plot(x, rpe_rot2, colors[1]+'o--', linewidth=2, markersize=1, label="Robust-Pose")
+    ax.plot(x, rpe_rot1, colors[0] + "o--", linewidth=2, markersize=1, label="FLex")
+    ax.plot(
+        x, rpe_rot2, colors[1] + "o--", linewidth=2, markersize=1, label="Robust-Pose"
+    )
     ax.legend()
-    fig.savefig(os.path.join(scene+'_rot_error_plot.pdf'))
-
+    fig.savefig(os.path.join(scene + "_rot_error_plot.pdf"))
 
 
 if __name__ == "__main__":
-    
     folders = []
     # LocalRF
     # = "Poses_Eval/P2_8_1/localrf_poses"
-    #file_name = "transforms_p2_8_1.json"
+    # file_name = "transforms_p2_8_1.json"
     # FLex
     basedir = "Poses_Eval/24_rev/FLex_poses"
     folders.append(basedir)

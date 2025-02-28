@@ -1,8 +1,8 @@
+import sys
 from typing import Callable, Collection, Dict, Iterable, List, Optional, Sequence, Union
 
-import torch
 import numpy as np
-import sys
+import torch
 
 
 def positional_encoding(positions, freqs):
@@ -17,10 +17,8 @@ def positional_encoding(positions, freqs):
     return pts
 
 
-def freq_positional_encoding(
-    barf_c2f, positions, freqs, progress 
-    ): 
-    """Apply the coarse-to-fine positional encoding strategy of BARF. 
+def freq_positional_encoding(barf_c2f, positions, freqs, progress):
+    """Apply the coarse-to-fine positional encoding strategy of BARF.
 
     Args:
         opt (edict): settings
@@ -30,20 +28,20 @@ def freq_positional_encoding(
     returns:
         positional encoding
     """
-    
+
     input_enc = positional_encoding(positions, freqs)
 
     # [B,...,2NL]
     # coarse-to-fine: smoothly mask positional encoding for BARF
-    if barf_c2f is not None and not (barf_c2f[-1]==0.0):
+    if barf_c2f is not None and not (barf_c2f[-1] == 0.0):
         # set weights for different frequency bands
-        start,end = barf_c2f
-        alpha = (progress-start)/(end-start)*freqs
-        k = torch.arange(freqs,dtype=torch.float32,device=positions.device)
-        weight = (1-(alpha-k).clamp_(min=0,max=1).mul_(np.pi).cos_())/2
+        start, end = barf_c2f
+        alpha = (progress - start) / (end - start) * freqs
+        k = torch.arange(freqs, dtype=torch.float32, device=positions.device)
+        weight = (1 - (alpha - k).clamp_(min=0, max=1).mul_(np.pi).cos_()) / 2
         # apply weights
         shape = input_enc.shape
-        input_enc = (input_enc.view(-1,freqs)*weight).view(*shape)
+        input_enc = (input_enc.view(-1, freqs) * weight).view(*shape)
 
     return input_enc
 
@@ -71,7 +69,7 @@ class General_MLP(torch.nn.Module):
         use_sigmoid: bool = True,
         zero_init: bool = True,
         use_tanh: bool = False,
-        barf_c2f = None,
+        barf_c2f=None,
     ):
         super().__init__()
 
@@ -87,7 +85,7 @@ class General_MLP(torch.nn.Module):
         self.use_sigmoid = use_sigmoid
         self.use_tanh = use_tanh
         self.barf_c2f = barf_c2f
-        if self.barf_c2f is not None or not (self.barf_c2f[-1]==0.0):
+        if self.barf_c2f is not None or not (self.barf_c2f[-1] == 0.0):
             self.progress = 0.0
         else:
             self.progress = 1.0
@@ -113,19 +111,16 @@ class General_MLP(torch.nn.Module):
         if zero_init:
             torch.nn.init.constant_(self.mlp[-1].bias, 0)
 
-
     def get_PE_weights(self):
-
-        if self.barf_c2f is not None and not (self.barf_c2f[-1]==0.0):
-            start,end = self.barf_c2f
-            alpha = (self.progress-start)/(end-start)*self.fea_pe
-            k = torch.arange(self.fea_pe,dtype=torch.float32)
-            weight = (1-(alpha-k).clamp_(min=0,max=1).mul_(np.pi).cos_())/2
+        if self.barf_c2f is not None and not (self.barf_c2f[-1] == 0.0):
+            start, end = self.barf_c2f
+            alpha = (self.progress - start) / (end - start) * self.fea_pe
+            k = torch.arange(self.fea_pe, dtype=torch.float32)
+            weight = (1 - (alpha - k).clamp_(min=0, max=1).mul_(np.pi).cos_()) / 2
         else:
             weight = torch.ones(self.fea_pe)
 
         return weight
-
 
     def forward(
         self,
@@ -142,18 +137,34 @@ class General_MLP(torch.nn.Module):
         if self.use_t:
             indata += [frame_time]
             if self.t_pe > 0:
-                indata += [freq_positional_encoding(self.barf_c2f, frame_time, self.t_pe, self.progress)]
+                indata += [
+                    freq_positional_encoding(
+                        self.barf_c2f, frame_time, self.t_pe, self.progress
+                    )
+                ]
         if self.use_fea:
             if self.fea_pe > 0:
-                indata += [freq_positional_encoding(self.barf_c2f, features, self.fea_pe, self.progress)]
+                indata += [
+                    freq_positional_encoding(
+                        self.barf_c2f, features, self.fea_pe, self.progress
+                    )
+                ]
         if self.use_pos:
             indata += [pts]
             if self.pos_pe > 0:
-                indata += [freq_positional_encoding(self.barf_c2f, pts, self.pos_pe, self.progress)]
+                indata += [
+                    freq_positional_encoding(
+                        self.barf_c2f, pts, self.pos_pe, self.progress
+                    )
+                ]
         if self.use_view:
             indata += [viewdirs]
             if self.view_pe > 0:
-                indata += [freq_positional_encoding(self.barf_c2f, viewdirs, self.view_pe, self.progress)]
+                indata += [
+                    freq_positional_encoding(
+                        self.barf_c2f, viewdirs, self.view_pe, self.progress
+                    )
+                ]
         mlp_in = torch.cat(indata, dim=-1)
 
         rgb = self.mlp(mlp_in)
@@ -162,10 +173,8 @@ class General_MLP(torch.nn.Module):
 
         if self.use_tanh:
             rgb = torch.tanh(rgb)
-            
 
         return rgb
-
 
 
 class MLPRender_Fea_late_view(torch.nn.Module):
@@ -217,18 +226,19 @@ class MLPRender_Fea_late_view(torch.nn.Module):
         torch.nn.init.constant_(self.mlp_view[-1].bias, 0)
 
     def forward(
-            self,
-            pts: torch.Tensor,
-            viewdirs: torch.Tensor,
-            features: torch.Tensor,
-            frame_time: torch.Tensor,
-        ) -> torch.Tensor:
+        self,
+        pts: torch.Tensor,
+        viewdirs: torch.Tensor,
+        features: torch.Tensor,
+        frame_time: torch.Tensor,
+    ) -> torch.Tensor:
         indata = [features]
         if self.fea_pe > 0:
             indata += [
                 torch.zeros(
-                    [features.shape[0], self.in_mlpC - features.shape[-1]], 
-                    device=features.device)
+                    [features.shape[0], self.in_mlpC - features.shape[-1]],
+                    device=features.device,
+                )
             ]
         indata_view = [viewdirs]
         if self.view_pe > 0:

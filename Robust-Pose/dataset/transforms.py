@@ -1,8 +1,8 @@
-from torchvision.transforms.functional import resize, center_crop
 from torchvision.transforms import InterpolationMode
+from torchvision.transforms.functional import center_crop, resize
 
 
-class Compose(object):
+class Compose:
     def __init__(self, transforms: list):
         self.transforms = transforms
 
@@ -12,7 +12,7 @@ class Compose(object):
         return args
 
 
-class StereoTransform(object):
+class StereoTransform:
     def __call__(self, left, right, mask):
         return left, right, mask
 
@@ -26,7 +26,7 @@ class ResizeStereo(StereoTransform):
         h, w = left.shape[-2:]
 
         scale = max(self.size[0] / h, self.size[1] / w)
-        size = [int(scale*h), int(scale*w)]
+        size = [int(scale * h), int(scale * w)]
         left = self._resize_with_crop(left, size)
         right = self._resize_with_crop(right, size)
         mask = self._resize_with_crop(mask, size, InterpolationMode.NEAREST)

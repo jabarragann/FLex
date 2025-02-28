@@ -1,20 +1,21 @@
+import copy
 import json
+import math
 import os
 import sys
 
+import cv2
 import numpy as np
+import tifffile as tiff
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 from tqdm import tqdm
-import tifffile as tiff
-import copy
-import cv2
-import math
 
-from .ray_utils import get_ray_directions_blender, get_rays, read_pfm, ndc_rays_blender
 from flex.render.util.util import decode_flow
+
+from .ray_utils import get_ray_directions_blender, get_rays, ndc_rays_blender, read_pfm
 
 blender2opencv = torch.Tensor([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
 
@@ -60,6 +61,7 @@ def pose_spherical(theta, phi, radius):
     )
     return c2w
 
+
 def mask_specularities(img, mask=None, spec_thr=0.96):
     spec_mask = img.sum(axis=-1) < (3 * spec_thr)
     mask = mask & spec_mask if mask is not None else spec_mask
@@ -85,15 +87,15 @@ class StereoMISDataset(Dataset):
         self.root_dir = datadir
         self.split = split
         self.downsample = downsample
-        #self.img_wh = (int(800 / downsample), int(800 / downsample))
+        # self.img_wh = (int(800 / downsample), int(800 / downsample))
         self.is_stack = is_stack
         self.N_vis = N_vis  # evaluate images for every N_vis images
 
         self.time_scale = time_scale
         self.world_bound_scale = 1.1
 
-        self.near = cfg.data.near #0.01#2.0 # adjust
-        self.far = cfg.data.far #1.0#6.0 # adjust
+        self.near = cfg.data.near  # 0.01#2.0 # adjust
+        self.far = cfg.data.far  # 1.0#6.0 # adjust
         self.near_far = [self.near, self.far]
         self.cfg = cfg
 
@@ -108,8 +110,8 @@ class StereoMISDataset(Dataset):
         self.load_flow = self.cfg.data.flow_data
         self.load_tool_mask = self.cfg.data.tool_mask
 
-        self.white_bg = False #True
-        self.ndc_ray = cfg.data.use_ndc #False
+        self.white_bg = False  # True
+        self.ndc_ray = cfg.data.use_ndc  # False
 
         self.read_meta()  # Read meta data
 
@@ -150,9 +152,17 @@ class StereoMISDataset(Dataset):
         print("compute_bbox_by_cam_frustrm: start")
         xyz_min = torch.Tensor([np.inf, np.inf, np.inf])
         xyz_max = -xyz_min
-        if self.split=='test' or self.cfg.data.datasampler_type=="hierach" or self.is_stack:
-            rays_o = self.all_rays.reshape(self.all_rays.shape[0]*self.all_rays.shape[1],self.all_rays.shape[2])[:,0:3]
-            viewdirs = self.all_rays.reshape(self.all_rays.shape[0]*self.all_rays.shape[1],self.all_rays.shape[2])[:,3:6]
+        if (
+            self.split == "test"
+            or self.cfg.data.datasampler_type == "hierach"
+            or self.is_stack
+        ):
+            rays_o = self.all_rays.reshape(
+                self.all_rays.shape[0] * self.all_rays.shape[1], self.all_rays.shape[2]
+            )[:, 0:3]
+            viewdirs = self.all_rays.reshape(
+                self.all_rays.shape[0] * self.all_rays.shape[1], self.all_rays.shape[2]
+            )[:, 3:6]
         else:
             rays_o = self.all_rays[:, 0:3]
             viewdirs = self.all_rays[:, 3:6]
@@ -169,26 +179,25 @@ class StereoMISDataset(Dataset):
         xyz_max += xyz_shift
         return xyz_min, xyz_max
 
-
     def read_meta(self):
         with open(os.path.join(self.root_dir, f"transforms_{self.split}.json")) as f:
             self.meta = json.load(f)
-            
-        if self.cfg.debug_mode:
-            if self.split=="train":
-                self.meta['frames'] = self.meta['frames'][:10] # only debug
-            else:
-                self.meta['frames'] = self.meta['frames'][:2] # only debug
-            print('Debug Mode activated!')
 
-        w, h = self.meta['w'], self.meta['h']
+        if self.cfg.debug_mode:
+            if self.split == "train":
+                self.meta["frames"] = self.meta["frames"][:10]  # only debug
+            else:
+                self.meta["frames"] = self.meta["frames"][:2]  # only debug
+            print("Debug Mode activated!")
+
+        w, h = self.meta["w"], self.meta["h"]
         # fix img_wh dim:
         self.img_wh = (int(w), int(h))
-        
+
         if self.cfg.local.use_preprocessed_poses:
-            self.cx = self.meta['cx']/self.downsample
-            self.cy = self.meta['cy']/self.downsample
-            self.focal = self.meta['fl_x']/self.downsample
+            self.cx = self.meta["cx"] / self.downsample
+            self.cy = self.meta["cy"] / self.downsample
+            self.focal = self.meta["fl_x"] / self.downsample
         else:
             fov = 85.6
             fov = fov * math.pi / 180
@@ -198,31 +207,37 @@ class StereoMISDataset(Dataset):
             self.cx = w * self.center_rel
             self.cy = h * self.center_rel
             self.focal = self.init_focal * self.focal_offset
-    
-        print(f'Focal: {self.focal}, CX: {self.cx}, CY: {self.cy}')
+
+        print(f"Focal: {self.focal}, CX: {self.cx}, CY: {self.cy}")
 
         self.depth_scale_factor = self.meta["depth_scale_factor"]
         self.original_depth_scale = self.meta["depth_scale_factor"]
         self.trans_center_shift = self.meta["recenter_trans"]
-        
+
         # ray directions for all pixels, same for all images (same H, W, focal)
         self.directions = get_ray_directions_blender(
-            h, w, [self.focal, self.focal], [self.cx, self.cy] # test cx and cy instead of standard center TODO: remove if experiment failed
+            h,
+            w,
+            [self.focal, self.focal],
+            [
+                self.cx,
+                self.cy,
+            ],  # test cx and cy instead of standard center TODO: remove if experiment failed
         )  # (h, w, 3)
-        
+
         self.directions = self.directions / torch.norm(
             self.directions, dim=-1, keepdim=True
         )
-        
-        '''
+
+        """
         self.intrinsics = torch.tensor(
             [[self.focal, 0, w / 2], [0, self.focal, h / 2], [0, 0, 1]]
         ).float()
-        '''
+        """
         self.intrinsics = torch.tensor(
             [[self.focal, 0, self.cx], [0, self.focal, self.cy], [0, 0, 1]]
         )
-        
+
         self.image_paths = []
         self.depth_paths = []
         self.poses = []
@@ -259,57 +274,63 @@ class StereoMISDataset(Dataset):
             img = Image.open(image_path)
 
             img = self.transform(img)  # (3, h, w)
-            spec_mask = mask_specularities(img.clone().permute(1,2,0).numpy())
+            spec_mask = mask_specularities(img.clone().permute(1, 2, 0).numpy())
             img = img.view(3, -1).permute(1, 0)  # (h*w, 3) RGB
 
             self.all_rgbs += [img]
 
             # specularity mask
-            spec_mask = self.transform(spec_mask[...,None]).bool()
-            spec_mask = spec_mask.view(1, -1).permute(1, 0) # (h*w, 1)
+            spec_mask = self.transform(spec_mask[..., None]).bool()
+            spec_mask = spec_mask.view(1, -1).permute(1, 0)  # (h*w, 1)
             self.all_spec_mask.append(spec_mask)
 
             # handling of depth files:
             if self.depth_data:
-                depth_file_path = frame['depth_file_path']
+                depth_file_path = frame["depth_file_path"]
                 depth = torch.tensor(tiff.imread(depth_file_path))
                 depth = depth.view(1, -1).permute(1, 0)  # (h*w, 1) Gray-scale
                 self.all_depths += [depth]
-            
+
             if self.load_flow:
                 # optical flow forwards and backwards
-                fwd_file_path = frame['fwd_file_path']
-                bwd_file_path = frame['bwd_file_path']
+                fwd_file_path = frame["fwd_file_path"]
+                bwd_file_path = frame["bwd_file_path"]
 
                 encoded_fwd_flow = cv2.imread(fwd_file_path, cv2.IMREAD_UNCHANGED)
                 encoded_bwd_flow = cv2.imread(bwd_file_path, cv2.IMREAD_UNCHANGED)
-                flow_scale = h / encoded_fwd_flow.shape[0] 
-                
+                flow_scale = h / encoded_fwd_flow.shape[0]
+
                 encoded_fwd_flow = cv2.resize(
-                    encoded_fwd_flow, tuple((w, h)), interpolation=cv2.INTER_AREA)
+                    encoded_fwd_flow, tuple((w, h)), interpolation=cv2.INTER_AREA
+                )
                 encoded_bwd_flow = cv2.resize(
-                    encoded_bwd_flow, tuple((w, h)), interpolation=cv2.INTER_AREA)   
-                        
+                    encoded_bwd_flow, tuple((w, h)), interpolation=cv2.INTER_AREA
+                )
+
                 fwd_flow, fwd_mask = decode_flow(encoded_fwd_flow)
                 bwd_flow, bwd_mask = decode_flow(encoded_bwd_flow)
 
                 fwd_flow = fwd_flow * flow_scale
                 bwd_flow = bwd_flow * flow_scale
-                #print(f"flow fwd: {fwd_flow[:10,:10]}")
-                #print(f"flow bwd: {bwd_flow[:10,:10]}")
-                
+                # print(f"flow fwd: {fwd_flow[:10,:10]}")
+                # print(f"flow bwd: {bwd_flow[:10,:10]}")
+
                 fwd_flow = self.transform(fwd_flow).view(2, -1).permute(1, 0)
                 bwd_flow = self.transform(bwd_flow).view(2, -1).permute(1, 0)
-                fwd_mask = self.transform(fwd_mask).view(1, -1).permute(1, 0)#.reshape(-1, 1)
-                bwd_mask = self.transform(bwd_mask).view(1, -1).permute(1, 0)#.reshape(-1, 1)
-                fwd_mask2 = torch.full_like(fwd_mask, frame['fwd_mask'])
-                bwd_mask2 = torch.full_like(bwd_mask, frame['bwd_mask'])
+                fwd_mask = (
+                    self.transform(fwd_mask).view(1, -1).permute(1, 0)
+                )  # .reshape(-1, 1)
+                bwd_mask = (
+                    self.transform(bwd_mask).view(1, -1).permute(1, 0)
+                )  # .reshape(-1, 1)
+                fwd_mask2 = torch.full_like(fwd_mask, frame["fwd_mask"])
+                bwd_mask2 = torch.full_like(bwd_mask, frame["bwd_mask"])
                 fwd_mask = torch.logical_and(fwd_mask, fwd_mask2)
                 bwd_mask = torch.logical_and(bwd_mask, bwd_mask2)
-                #fwd_mask = torch.full_like(fwd_mask, frame['fwd_mask'])
-                #bwd_mask = torch.full_like(bwd_mask, frame['bwd_mask'])
-                self.prev_test.append(torch.tensor([frame['prev_test']]))
-                self.post_test.append(torch.tensor([frame['post_test']]))
+                # fwd_mask = torch.full_like(fwd_mask, frame['fwd_mask'])
+                # bwd_mask = torch.full_like(bwd_mask, frame['bwd_mask'])
+                self.prev_test.append(torch.tensor([frame["prev_test"]]))
+                self.post_test.append(torch.tensor([frame["post_test"]]))
 
             else:
                 fwd_flow, fwd_mask, bwd_flow, bwd_mask = None, None, None, None
@@ -320,10 +341,10 @@ class StereoMISDataset(Dataset):
             self.all_bwd_mask.append(bwd_mask)
 
             if self.load_tool_mask:
-                tool_mask_path = frame['tool_mask_path']
+                tool_mask_path = frame["tool_mask_path"]
                 tool_mask = self.transform(Image.open(tool_mask_path))[:1]
                 # set mask to binary by filtering out all pixels below 255
-                tool_mask = tool_mask >= 255/255
+                tool_mask = tool_mask >= 255 / 255
                 tool_mask = tool_mask.view(1, -1).permute(1, 0)  # (h*w, 1)
 
                 self.all_tool_masks.append(tool_mask)
@@ -339,9 +360,8 @@ class StereoMISDataset(Dataset):
             ).expand(rays_o.shape[0], 1)
             self.all_times += [cur_time]
 
-
         self.poses = torch.stack(self.poses)
-        if self.split=='train' and self.load_flow:
+        if self.split == "train" and self.load_flow:
             self.prev_test = torch.stack(self.prev_test)
             self.post_test = torch.stack(self.post_test)
         #  self.is_stack stacks all images into a big chunk, with shape (N, H, W, 3).
@@ -354,13 +374,9 @@ class StereoMISDataset(Dataset):
                 self.all_rgbs, 0
             )  # (len(self.meta['frames])*h*w, 3)
             self.all_times = torch.cat(self.all_times, 0)
-            self.all_spec_mask = torch.cat(
-                self.all_spec_mask, 0
-            )
+            self.all_spec_mask = torch.cat(self.all_spec_mask, 0)
             if self.depth_data:
-                self.all_depths = torch.cat(
-                    self.all_depths, 0
-                )
+                self.all_depths = torch.cat(self.all_depths, 0)
             if self.load_flow:
                 self.all_fwd = torch.cat(
                     self.all_fwd, 0
@@ -375,9 +391,7 @@ class StereoMISDataset(Dataset):
                     self.all_bwd_mask, 0
                 )  # (len(self.meta['frames])*h*w, 1)
             if self.load_tool_mask:
-                self.all_tool_masks = torch.cat(
-                    self.all_tool_masks, 0
-                )
+                self.all_tool_masks = torch.cat(self.all_tool_masks, 0)
 
         else:
             self.all_rays = torch.stack(
@@ -392,8 +406,8 @@ class StereoMISDataset(Dataset):
             )  # (len(self.meta['frames]),h,w,1)
             if self.depth_data:
                 self.all_depths = torch.stack(self.all_depths, 0).reshape(
-                -1, *self.img_wh[::-1], 1
-            )  # (len(self.meta['frames]),h,w,1)
+                    -1, *self.img_wh[::-1], 1
+                )  # (len(self.meta['frames]),h,w,1)
 
             if self.load_flow:
                 self.all_fwd = torch.stack(self.all_fwd, 0).reshape(
@@ -411,13 +425,10 @@ class StereoMISDataset(Dataset):
 
             if self.load_tool_mask:
                 self.all_tool_masks = torch.stack(self.all_tool_masks, 0).reshape(
-                -1, *self.img_wh[::-1], 1
-            )
+                    -1, *self.img_wh[::-1], 1
+                )
 
-
-        all_imgs = copy.deepcopy(self.all_rgbs.reshape(
-                -1, *self.img_wh[::-1], 3
-            ))
+        all_imgs = copy.deepcopy(self.all_rgbs.reshape(-1, *self.img_wh[::-1], 3))
 
         self.all_times = self.time_scale * (self.all_times * 2.0 - 1.0)
         self.max_depth_value = torch.max(self.all_depths)
@@ -429,7 +440,6 @@ class StereoMISDataset(Dataset):
             print(f"Min F Flow: {torch.min(self.all_fwd)}")
             print(f"Max B Flow: {torch.max(self.all_bwd)}")
             print(f"Min B Flow: {torch.min(self.all_bwd)}")
-
 
     def define_transforms(self):
         self.transform = T.ToTensor()
@@ -488,15 +498,14 @@ class StereoMISDataset(Dataset):
             sample = {"rays": rays, "rgbs": img, "time": time, "spec_mask": spec_mask}
 
         if self.depth_data:
-            sample['depths'] = self.all_depths[idx]
+            sample["depths"] = self.all_depths[idx]
         if self.load_flow:
-            sample['fwd'] = self.all_fwd[idx]
-            sample['bwd'] = self.all_bwd[idx]
-            sample['fwd_mask'] = self.all_fwd_mask[idx]
-            sample['bwd_mask'] = self.all_bwd_mask[idx]
+            sample["fwd"] = self.all_fwd[idx]
+            sample["bwd"] = self.all_bwd[idx]
+            sample["fwd_mask"] = self.all_fwd_mask[idx]
+            sample["bwd_mask"] = self.all_bwd_mask[idx]
         if self.load_tool_mask:
-            sample['tool_mask'] = self.all_tool_masks[idx]
-
+            sample["tool_mask"] = self.all_tool_masks[idx]
 
         return sample
 
@@ -537,22 +546,35 @@ class StereoMISDataset(Dataset):
 
         return out, self.random_times[idx_img]
 
-
-
     def get_new_pose_rays(self, pose, times, time):
-
         xs = list(np.zeros(times))
         ys = list(np.zeros(times))
         zs = list(np.zeros(times))
 
         rot_deg = 0.5
-        rxs = list(np.zeros(2)) + list(np.ones(2) * -rot_deg) + list(np.zeros(2)) + list(np.ones(2)*1.5*rot_deg) + list(np.zeros(2)) + list(np.ones(2)*-2*rot_deg) + list(np.ones(2)*1.5*rot_deg)
-        rys = list(np.ones(2) * rot_deg) + list(np.zeros(2)) + list(np.ones(2) * -1.5*rot_deg) + list(np.zeros(2)) + list(np.ones(2)*2*rot_deg) + list(np.zeros(2)) + list(np.ones(2)*-1.5*rot_deg)
+        rxs = (
+            list(np.zeros(2))
+            + list(np.ones(2) * -rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * 1.5 * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * -2 * rot_deg)
+            + list(np.ones(2) * 1.5 * rot_deg)
+        )
+        rys = (
+            list(np.ones(2) * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * -1.5 * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * 2 * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * -1.5 * rot_deg)
+        )
         rzs = list(np.zeros(times))
 
-        if times==0: # useful for simulating fixed pose for all timesteps
+        if times == 0:  # useful for simulating fixed pose for all timesteps
             rays_all = []  # initialize list to store [rays_o, rays_d]
-            poses = pose.reshape(1,pose.shape[0], pose.shape[1])
+            poses = pose.reshape(1, pose.shape[0], pose.shape[1])
             time_a = time
             for i in range(1):
                 c2w = torch.FloatTensor(poses[i])
@@ -563,27 +585,33 @@ class StereoMISDataset(Dataset):
         for i in range(times):
             # x, y, z, rx, ry, rz = ...
             x, y, z, rx, ry, rz = xs[i], 0, zs[i], rxs[i], rys[i], rzs[i]
-            c2w = np.array([[1, 0, 0, x],
-                            [0, 1, 0, y],
-                            [0, 0, 1, z],
-                            [0, 0, 0, 1]])
-            R_X = np.array([
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, np.cos(rx * 3.1415 / 180), -np.sin(rx * 3.1415 / 180), 0.0],
-                [0.0, np.sin(rx * 3.1415 / 180), np.cos(rx * 3.1415 / 180), 0.0],
-                [0.0, 0.0, 0.0, 1.0]])
+            c2w = np.array([[1, 0, 0, x], [0, 1, 0, y], [0, 0, 1, z], [0, 0, 0, 1]])
+            R_X = np.array(
+                [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, np.cos(rx * 3.1415 / 180), -np.sin(rx * 3.1415 / 180), 0.0],
+                    [0.0, np.sin(rx * 3.1415 / 180), np.cos(rx * 3.1415 / 180), 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
 
-            R_Y = np.array([
-                [np.cos(ry * 3.1415 / 180), 0.0, np.sin(ry * 3.1415 / 180), 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [-np.sin(ry * 3.1415 / 180), 0.0, np.cos(ry * 3.1415 / 180), 0.0],
-                [0.0, 0.0, 0.0, 1.0]])
+            R_Y = np.array(
+                [
+                    [np.cos(ry * 3.1415 / 180), 0.0, np.sin(ry * 3.1415 / 180), 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [-np.sin(ry * 3.1415 / 180), 0.0, np.cos(ry * 3.1415 / 180), 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
 
-            R_Z = np.array([
-                [np.cos(rz * 3.1415 / 180), -np.sin(rz * 3.1415 / 180), 0.0, 0.0],
-                [np.sin(rz * 3.1415 / 180), np.cos(rz * 3.1415 / 180), 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0]])
+            R_Z = np.array(
+                [
+                    [np.cos(rz * 3.1415 / 180), -np.sin(rz * 3.1415 / 180), 0.0, 0.0],
+                    [np.sin(rz * 3.1415 / 180), np.cos(rz * 3.1415 / 180), 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
 
             if i == 0:
                 pose = pose.detach().cpu().numpy()
@@ -592,10 +620,14 @@ class StereoMISDataset(Dataset):
 
             new_time = time + (i + 1) * 0.00001
 
-            new_pose = new_pose.reshape(1, new_pose.shape[0], new_pose.shape[1])#[:, :3]
+            new_pose = new_pose.reshape(
+                1, new_pose.shape[0], new_pose.shape[1]
+            )  # [:, :3]
 
             if i == 0:
-                poses = np.concatenate((pose.reshape(1, pose.shape[0], pose.shape[1]), new_pose))
+                poses = np.concatenate(
+                    (pose.reshape(1, pose.shape[0], pose.shape[1]), new_pose)
+                )
                 time_a = np.concatenate((time, new_time))
                 time = new_time
                 pose = new_pose[0]

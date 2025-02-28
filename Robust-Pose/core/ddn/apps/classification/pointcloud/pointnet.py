@@ -5,21 +5,23 @@
 # Modified from PyTorch PointNet code:
 # https://github.com/yanx27/Pointnet_Pointnet2_pytorch/tree/31deedb10b85ec30178df57a6389b2f326f7c970
 
+import sys
+
+import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.parallel
 import torch.utils.data
 from torch.autograd import Variable
-import numpy as np
-import torch.nn.functional as F
 
-import sys
 sys.path.append("../../../")
 import ddn.pytorch.robustpool as robustpool
 
+
 class STN3d(nn.Module):
-    def __init__(self, robust_type='', alpha=1.0):
-        super(STN3d, self).__init__()
+    def __init__(self, robust_type="", alpha=1.0):
+        super().__init__()
         self.conv1 = torch.nn.Conv1d(3, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
@@ -42,19 +44,31 @@ class STN3d(nn.Module):
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
-        
+
         # Adjust pooling layer
-        alpha_tensor = torch.tensor([self.alpha], dtype=x.dtype, device=x.device, requires_grad=False)
-        if self.robust_type == 'Q':
-            x = robustpool.RobustGlobalPool2dFn.apply(x.unsqueeze(-1), robustpool.Quadratic, alpha_tensor)
-        elif self.robust_type == 'PH':
-            x = robustpool.RobustGlobalPool2dFn.apply(x.unsqueeze(-1), robustpool.PseudoHuber, alpha_tensor)
-        elif self.robust_type == 'H':
-            x = robustpool.RobustGlobalPool2dFn.apply(x.unsqueeze(-1), robustpool.Huber, alpha_tensor)
-        elif self.robust_type == 'W':
-            x = robustpool.RobustGlobalPool2dFn.apply(x.unsqueeze(-1), robustpool.Welsch, alpha_tensor)
-        elif self.robust_type == 'TQ':
-            x = robustpool.RobustGlobalPool2dFn.apply(x.unsqueeze(-1), robustpool.TruncatedQuadratic, alpha_tensor)
+        alpha_tensor = torch.tensor(
+            [self.alpha], dtype=x.dtype, device=x.device, requires_grad=False
+        )
+        if self.robust_type == "Q":
+            x = robustpool.RobustGlobalPool2dFn.apply(
+                x.unsqueeze(-1), robustpool.Quadratic, alpha_tensor
+            )
+        elif self.robust_type == "PH":
+            x = robustpool.RobustGlobalPool2dFn.apply(
+                x.unsqueeze(-1), robustpool.PseudoHuber, alpha_tensor
+            )
+        elif self.robust_type == "H":
+            x = robustpool.RobustGlobalPool2dFn.apply(
+                x.unsqueeze(-1), robustpool.Huber, alpha_tensor
+            )
+        elif self.robust_type == "W":
+            x = robustpool.RobustGlobalPool2dFn.apply(
+                x.unsqueeze(-1), robustpool.Welsch, alpha_tensor
+            )
+        elif self.robust_type == "TQ":
+            x = robustpool.RobustGlobalPool2dFn.apply(
+                x.unsqueeze(-1), robustpool.TruncatedQuadratic, alpha_tensor
+            )
         else:
             x = torch.max(x, 2, keepdim=True)[0]
             x = x.view(-1, 1024)
@@ -63,8 +77,15 @@ class STN3d(nn.Module):
         x = F.relu(self.bn5(self.fc2(x)))
         x = self.fc3(x)
 
-        iden = Variable(torch.from_numpy(np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]).astype(np.float32))).view(1, 9).repeat(
-            batchsize, 1)
+        iden = (
+            Variable(
+                torch.from_numpy(
+                    np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]).astype(np.float32)
+                )
+            )
+            .view(1, 9)
+            .repeat(batchsize, 1)
+        )
         if x.is_cuda:
             iden = iden.cuda()
         x = x + iden
@@ -74,7 +95,7 @@ class STN3d(nn.Module):
 
 class STNkd(nn.Module):
     def __init__(self, k=64):
-        super(STNkd, self).__init__()
+        super().__init__()
         self.conv1 = torch.nn.Conv1d(k, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
@@ -103,8 +124,11 @@ class STNkd(nn.Module):
         x = F.relu(self.bn5(self.fc2(x)))
         x = self.fc3(x)
 
-        iden = Variable(torch.from_numpy(np.eye(self.k).flatten().astype(np.float32))).view(1, self.k * self.k).repeat(
-            batchsize, 1)
+        iden = (
+            Variable(torch.from_numpy(np.eye(self.k).flatten().astype(np.float32)))
+            .view(1, self.k * self.k)
+            .repeat(batchsize, 1)
+        )
         if x.is_cuda:
             iden = iden.cuda()
         x = x + iden
@@ -113,10 +137,20 @@ class STNkd(nn.Module):
 
 
 class PointNetEncoder(nn.Module):
-    def __init__(self, global_feat=True, input_transform=False, feature_transform=False, robust_type='', alpha=1.0, semseg=False):
-        super(PointNetEncoder, self).__init__()
+    def __init__(
+        self,
+        global_feat=True,
+        input_transform=False,
+        feature_transform=False,
+        robust_type="",
+        alpha=1.0,
+        semseg=False,
+    ):
+        super().__init__()
         self.stn = STN3d(robust_type) if not semseg else STNkd(k=9)
-        self.conv1 = torch.nn.Conv1d(3, 64, 1) if not semseg else torch.nn.Conv1d(9, 64, 1)
+        self.conv1 = (
+            torch.nn.Conv1d(3, 64, 1) if not semseg else torch.nn.Conv1d(9, 64, 1)
+        )
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
         self.bn1 = nn.BatchNorm1d(64)
@@ -154,17 +188,29 @@ class PointNetEncoder(nn.Module):
         x = self.bn3(self.conv3(x))
 
         # Adjust pooling layer
-        alpha_tensor = torch.tensor([self.alpha], dtype=x.dtype, device=x.device, requires_grad=False)
-        if self.robust_type == 'Q':
-            x = robustpool.RobustGlobalPool2dFn.apply(x.unsqueeze(-1), robustpool.Quadratic, alpha_tensor)
-        elif self.robust_type == 'PH':
-            x = robustpool.RobustGlobalPool2dFn.apply(x.unsqueeze(-1), robustpool.PseudoHuber, alpha_tensor)
-        elif self.robust_type == 'H':
-            x = robustpool.RobustGlobalPool2dFn.apply(x.unsqueeze(-1), robustpool.Huber, alpha_tensor)
-        elif self.robust_type == 'W':
-            x = robustpool.RobustGlobalPool2dFn.apply(x.unsqueeze(-1), robustpool.Welsch, alpha_tensor)
-        elif self.robust_type == 'TQ':
-            x = robustpool.RobustGlobalPool2dFn.apply(x.unsqueeze(-1), robustpool.TruncatedQuadratic, alpha_tensor)
+        alpha_tensor = torch.tensor(
+            [self.alpha], dtype=x.dtype, device=x.device, requires_grad=False
+        )
+        if self.robust_type == "Q":
+            x = robustpool.RobustGlobalPool2dFn.apply(
+                x.unsqueeze(-1), robustpool.Quadratic, alpha_tensor
+            )
+        elif self.robust_type == "PH":
+            x = robustpool.RobustGlobalPool2dFn.apply(
+                x.unsqueeze(-1), robustpool.PseudoHuber, alpha_tensor
+            )
+        elif self.robust_type == "H":
+            x = robustpool.RobustGlobalPool2dFn.apply(
+                x.unsqueeze(-1), robustpool.Huber, alpha_tensor
+            )
+        elif self.robust_type == "W":
+            x = robustpool.RobustGlobalPool2dFn.apply(
+                x.unsqueeze(-1), robustpool.Welsch, alpha_tensor
+            )
+        elif self.robust_type == "TQ":
+            x = robustpool.RobustGlobalPool2dFn.apply(
+                x.unsqueeze(-1), robustpool.TruncatedQuadratic, alpha_tensor
+            )
         else:
             x = torch.max(x, 2, keepdim=True)[0]
             x = x.view(-1, 1024)
@@ -177,11 +223,24 @@ class PointNetEncoder(nn.Module):
 
 
 class PointNetCls(nn.Module):
-    def __init__(self, k=2, input_transform=False, feature_transform=False, robust_type='', alpha=1.0):
-        super(PointNetCls, self).__init__()
+    def __init__(
+        self,
+        k=2,
+        input_transform=False,
+        feature_transform=False,
+        robust_type="",
+        alpha=1.0,
+    ):
+        super().__init__()
         self.input_transform = input_transform
         self.feature_transform = feature_transform
-        self.feat = PointNetEncoder(global_feat=True, input_transform=input_transform, feature_transform=feature_transform, robust_type=robust_type, alpha=alpha)
+        self.feat = PointNetEncoder(
+            global_feat=True,
+            input_transform=input_transform,
+            feature_transform=feature_transform,
+            robust_type=robust_type,
+            alpha=alpha,
+        )
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, k)
@@ -199,8 +258,8 @@ class PointNetCls(nn.Module):
 
 
 class PointNetDenseCls(nn.Module):
-    def __init__(self, cat_num=16,part_num=50):
-        super(PointNetDenseCls, self).__init__()
+    def __init__(self, cat_num=16, part_num=50):
+        super().__init__()
         self.cat_num = cat_num
         self.part_num = part_num
         self.stn = STN3d()
@@ -231,8 +290,8 @@ class PointNetDenseCls(nn.Module):
         self.bns2 = nn.BatchNorm1d(256)
         self.bns3 = nn.BatchNorm1d(128)
 
-    def forward(self, point_cloud,label):
-        batchsize,_ , n_pts = point_cloud.size()
+    def forward(self, point_cloud, label):
+        batchsize, _, n_pts = point_cloud.size()
         # point_cloud_transformed
         trans = self.stn(point_cloud)
         point_cloud = point_cloud.transpose(2, 1)
@@ -255,10 +314,10 @@ class PointNetDenseCls(nn.Module):
         # classification network
         net = F.relu(self.bnc1(self.fc1(out_max)))
         net = F.relu(self.bnc2(self.dropout(self.fc2(net))))
-        net = self.fc3(net) # [B,16]
+        net = self.fc3(net)  # [B,16]
         # segmentation network
-        out_max = torch.cat([out_max,label],1)
-        expand = out_max.view(-1, 2048+16, 1).repeat(1, 1, n_pts)
+        out_max = torch.cat([out_max, label], 1)
+        expand = out_max.view(-1, 2048 + 16, 1).repeat(1, 1, n_pts)
         concat = torch.cat([expand, out1, out2, out3, out4, out5], 1)
         net2 = F.relu(self.bns1(self.convs1(concat)))
         net2 = F.relu(self.bns2(self.convs2(net2)))
@@ -266,7 +325,7 @@ class PointNetDenseCls(nn.Module):
         net2 = self.convs4(net2)
         net2 = net2.transpose(2, 1).contiguous()
         net2 = F.log_softmax(net2.view(-1, self.part_num), dim=-1)
-        net2 = net2.view(batchsize, n_pts, self.part_num) # [B, N 50]
+        net2 = net2.view(batchsize, n_pts, self.part_num)  # [B, N 50]
 
         return net, net2, trans_feat
 
@@ -276,29 +335,38 @@ def feature_transform_regularizer(trans):
     I = torch.eye(d)[None, :, :]
     if trans.is_cuda:
         I = I.cuda()
-    loss = torch.mean(torch.norm(torch.bmm(trans, trans.transpose(2, 1) - I), dim=(1, 2)))
+    loss = torch.mean(
+        torch.norm(torch.bmm(trans, trans.transpose(2, 1) - I), dim=(1, 2))
+    )
     return loss
 
+
 class PointNetLoss(torch.nn.Module):
-    def __init__(self, weight=1,mat_diff_loss_scale=0.001):
-        super(PointNetLoss, self).__init__()
+    def __init__(self, weight=1, mat_diff_loss_scale=0.001):
+        super().__init__()
         self.mat_diff_loss_scale = mat_diff_loss_scale
         self.weight = weight
 
-    def forward(self, labels_pred, label, seg_pred,seg, trans_feat):
+    def forward(self, labels_pred, label, seg_pred, seg, trans_feat):
         seg_loss = F.nll_loss(seg_pred, seg)
         mat_diff_loss = feature_transform_regularizer(trans_feat)
         label_loss = F.nll_loss(labels_pred, label)
 
-        loss = self.weight * seg_loss + (1-self.weight) * label_loss + mat_diff_loss * self.mat_diff_loss_scale
+        loss = (
+            self.weight * seg_loss
+            + (1 - self.weight) * label_loss
+            + mat_diff_loss * self.mat_diff_loss_scale
+        )
         return loss, seg_loss, label_loss
 
 
 class PointNetSeg(nn.Module):
-    def __init__(self,num_class,feature_transform=False, semseg = False):
-        super(PointNetSeg, self).__init__()
+    def __init__(self, num_class, feature_transform=False, semseg=False):
+        super().__init__()
         self.k = num_class
-        self.feat = PointNetEncoder(global_feat=False,feature_transform=feature_transform, semseg = semseg)
+        self.feat = PointNetEncoder(
+            global_feat=False, feature_transform=feature_transform, semseg=semseg
+        )
         self.conv1 = torch.nn.Conv1d(1088, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
@@ -316,18 +384,17 @@ class PointNetSeg(nn.Module):
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
         x = self.conv4(x)
-        x = x.transpose(2,1).contiguous()
-        x = F.log_softmax(x.view(-1,self.k), dim=-1)
+        x = x.transpose(2, 1).contiguous()
+        x = F.log_softmax(x.view(-1, self.k), dim=-1)
         x = x.view(batchsize, n_pts, self.k)
         return x, trans_feat
 
 
-
-if __name__ == '__main__':
-    point = torch.randn(8,3,1024)
-    label = torch.randn(8,16)
+if __name__ == "__main__":
+    point = torch.randn(8, 3, 1024)
+    label = torch.randn(8, 16)
     model = PointNetDenseCls()
-    net, net2, trans_feat = model(point,label)
-    print('net',net.shape)
-    print('net2',net2.shape)
-    print('trans_feat',trans_feat.shape)
+    net, net2, trans_feat = model(point, label)
+    print("net", net.shape)
+    print("net2", net2.shape)
+    print("trans_feat", trans_feat.shape)

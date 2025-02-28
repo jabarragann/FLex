@@ -25,9 +25,10 @@
 # Fred Zhang <frederic.zhang@anu.edu.au>
 #
 
+import warnings
+
 import torch
 import torch.nn as nn
-import warnings
 
 
 def sinkhorn(M, r=None, c=None, gamma=1.0, eps=1.0e-6, maxiters=1000, logspace=False):
@@ -66,7 +67,9 @@ def sinkhorn(M, r=None, c=None, gamma=1.0, eps=1.0e-6, maxiters=1000, logspace=F
     return P
 
 
-def _sinkhorn_inline(M, r=None, c=None, gamma=1.0, eps=1.0e-6, maxiters=1000, logspace=False):
+def _sinkhorn_inline(
+    M, r=None, c=None, gamma=1.0, eps=1.0e-6, maxiters=1000, logspace=False
+):
     """As above but with inline calculations for when autograd is not needed."""
 
     B, H, W = M.shape
@@ -98,7 +101,7 @@ def _sinkhorn_inline(M, r=None, c=None, gamma=1.0, eps=1.0e-6, maxiters=1000, lo
 
 
 class OptimalTransportFcn(torch.autograd.Function):
-    """
+    r"""
     PyTorch autograd function for entropy regularized optimal transport. Assumes batched inputs as follows:
         M:  (B,H,W) tensor
         r:  (B,H) tensor, (1,H) tensor or None for constant uniform vector
@@ -111,9 +114,19 @@ class OptimalTransportFcn(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, M, r=None, c=None, gamma=1.0, eps=1.0e-6, maxiters=1000, logspace=False, method='block'):
+    def forward(
+        ctx,
+        M,
+        r=None,
+        c=None,
+        gamma=1.0,
+        eps=1.0e-6,
+        maxiters=1000,
+        logspace=False,
+        method="block",
+    ):
         """Solve optimal transport using skinhorn. Method can be 'block', 'full' or 'approx'."""
-        assert method in ('block', 'full', 'approx')
+        assert method in ("block", "full", "approx")
 
         with torch.no_grad():
             # normalize r and c to ensure that they sum to one (and save normalization factor for backward pass)
@@ -147,7 +160,7 @@ class OptimalTransportFcn(torch.autograd.Function):
         dJdc = None if not ctx.needs_input_grad[2] else torch.zeros_like(c)
 
         # return approximate gradients
-        if ctx.method == 'approx':
+        if ctx.method == "approx":
             return dJdM, dJdr, dJdc, None, None, None, None, None, None
 
         # compute exact row and column sums (in case of small numerical errors or forward pass not converging)
@@ -159,15 +172,21 @@ class OptimalTransportFcn(torch.autograd.Function):
         vHAt2 = torch.sum(dJdM, dim=1)
 
         # compute [v1, v2] = -v^T H^{-1} A^T (A H^{-1] A^T)^{-1}
-        if ctx.method == 'block':
+        if ctx.method == "block":
             # by block inverse of (A H^{-1] A^T)
             PdivC = P[:, 1:H, 0:W] / beta.view(B, 1, W)
-            RminusPPdivC = torch.diag_embed(alpha[:, 1:H]) - torch.einsum("bij,bkj->bik", P[:, 1:H, 0:W], PdivC)
+            RminusPPdivC = torch.diag_embed(alpha[:, 1:H]) - torch.einsum(
+                "bij,bkj->bik", P[:, 1:H, 0:W], PdivC
+            )
             try:
                 block_11 = torch.cholesky(RminusPPdivC)
             except:
                 # block_11 = torch.ones((B, H-1, H-1), device=M.device, dtype=M.dtype)
-                block_11 = torch.eye(H - 1, device=M.device, dtype=M.dtype).view(1, H - 1, H - 1).repeat(B, 1, 1)
+                block_11 = (
+                    torch.eye(H - 1, device=M.device, dtype=M.dtype)
+                    .view(1, H - 1, H - 1)
+                    .repeat(B, 1, 1)
+                )
                 for b in range(B):
                     try:
                         block_11[b, :, :] = torch.cholesky(RminusPPdivC[b, :, :])
@@ -177,22 +196,32 @@ class OptimalTransportFcn(torch.autograd.Function):
                         pass
 
             block_12 = torch.cholesky_solve(PdivC, block_11)
-            block_22 = torch.diag_embed(1.0 / beta) + torch.einsum("bji,bjk->bik", block_12, PdivC)
+            block_22 = torch.diag_embed(1.0 / beta) + torch.einsum(
+                "bji,bjk->bik", block_12, PdivC
+            )
 
-            v1 = torch.cholesky_solve(vHAt1.view(B, H - 1, 1), block_11).view(B, H - 1) - torch.einsum("bi,bji->bj", vHAt2, block_12)
-            v2 = torch.einsum("bi,bij->bj", vHAt2, block_22) - torch.einsum("bi,bij->bj", vHAt1, block_12)
+            v1 = torch.cholesky_solve(vHAt1.view(B, H - 1, 1), block_11).view(
+                B, H - 1
+            ) - torch.einsum("bi,bji->bj", vHAt2, block_12)
+            v2 = torch.einsum("bi,bij->bj", vHAt2, block_22) - torch.einsum(
+                "bi,bij->bj", vHAt1, block_12
+            )
 
         else:
             # by full inverse of (A H^{-1] A^T)
-            AinvHAt = torch.empty((B, H + W - 1, H + W - 1), device=M.device, dtype=M.dtype)
-            AinvHAt[:, 0:H - 1, 0:H - 1] = torch.diag_embed(alpha[:, 1:H])
-            AinvHAt[:, H - 1:H + W - 1, H - 1:H + W - 1] = torch.diag_embed(beta)
-            AinvHAt[:, 0:H - 1, H - 1:H + W - 1] = P[:, 1:H, 0:W]
-            AinvHAt[:, H - 1:H + W - 1, 0:H - 1] = P[:, 1:H, 0:W].transpose(1, 2)
+            AinvHAt = torch.empty(
+                (B, H + W - 1, H + W - 1), device=M.device, dtype=M.dtype
+            )
+            AinvHAt[:, 0 : H - 1, 0 : H - 1] = torch.diag_embed(alpha[:, 1:H])
+            AinvHAt[:, H - 1 : H + W - 1, H - 1 : H + W - 1] = torch.diag_embed(beta)
+            AinvHAt[:, 0 : H - 1, H - 1 : H + W - 1] = P[:, 1:H, 0:W]
+            AinvHAt[:, H - 1 : H + W - 1, 0 : H - 1] = P[:, 1:H, 0:W].transpose(1, 2)
 
-            v = torch.einsum("bi,bij->bj", torch.cat((vHAt1, vHAt2), dim=1), torch.inverse(AinvHAt))
-            v1 = v[:, 0:H - 1]
-            v2 = v[:, H - 1:H + W - 1]
+            v = torch.einsum(
+                "bi,bij->bj", torch.cat((vHAt1, vHAt2), dim=1), torch.inverse(AinvHAt)
+            )
+            v1 = v[:, 0 : H - 1]
+            v2 = v[:, H - 1 : H + W - 1]
 
         # compute v^T H^{-1} A^T (A H^{-1] A^T)^{-1} A H^{-1} B - v^T H^{-1} B
         dJdM[:, 1:H, 0:W] -= v1.view(B, H - 1, 1) * P[:, 1:H, 0:W]
@@ -204,19 +233,29 @@ class OptimalTransportFcn(torch.autograd.Function):
 
         # compute v^T H^{-1} A^T (A H^{-1] A^T)^{-1} (A H^{-1} B - C) - v^T H^{-1} B
         if dJdr is not None:
-            dJdr = ctx.inv_r_sum.view(r.shape[0], 1) / ctx.gamma * \
-                   (torch.sum(r[:, 1:H] * v1, dim=1, keepdim=True) - torch.cat((torch.zeros(B, 1, device=r.device), v1), dim=1))
+            dJdr = (
+                ctx.inv_r_sum.view(r.shape[0], 1)
+                / ctx.gamma
+                * (
+                    torch.sum(r[:, 1:H] * v1, dim=1, keepdim=True)
+                    - torch.cat((torch.zeros(B, 1, device=r.device), v1), dim=1)
+                )
+            )
 
         # compute v^T H^{-1} A^T (A H^{-1] A^T)^{-1} (A H^{-1} B - C) - v^T H^{-1} B
         if dJdc is not None:
-            dJdc = ctx.inv_c_sum.view(c.shape[0], 1) / ctx.gamma * (torch.sum(c * v2, dim=1, keepdim=True) - v2)
+            dJdc = (
+                ctx.inv_c_sum.view(c.shape[0], 1)
+                / ctx.gamma
+                * (torch.sum(c * v2, dim=1, keepdim=True) - v2)
+            )
 
         # return gradients (None for gamma, eps, maxiters and logspace)
         return dJdM, dJdr, dJdc, None, None, None, None, None, None
 
 
 class OptimalTransportLayer(nn.Module):
-    """
+    r"""
     Neural network layer to implement optimal transport.
 
     Parameters:
@@ -237,8 +276,10 @@ class OptimalTransportLayer(nn.Module):
         If `full`, invert the full A H^{-1} A^T matrix without exploiting the block structure
     """
 
-    def __init__(self, gamma=1.0, eps=1.0e-6, maxiters=1000, logspace=False, method='block'):
-        super(OptimalTransportLayer, self).__init__()
+    def __init__(
+        self, gamma=1.0, eps=1.0e-6, maxiters=1000, logspace=False, method="block"
+    ):
+        super().__init__()
         self.gamma = gamma
         self.eps = eps
         self.maxiters = maxiters
@@ -267,14 +308,18 @@ class OptimalTransportLayer(nn.Module):
         if ndim == 2:
             M = M.unsqueeze(dim=0)
         elif ndim != 3:
-            raise ValueError(f"The shape of the input tensor {M_shape} does not match that of an matrix")
+            raise ValueError(
+                f"The shape of the input tensor {M_shape} does not match that of an matrix"
+            )
 
         # Handle special case of 1x1 matrices
         nr, nc = M_shape[-2:]
         if nr == 1 and nc == 1:
             P = torch.ones_like(M)
         else:
-            P = OptimalTransportFcn.apply(M, r, c, self.gamma, self.eps, self.maxiters, self.logspace, self.method)
+            P = OptimalTransportFcn.apply(
+                M, r, c, self.gamma, self.eps, self.maxiters, self.logspace, self.method
+            )
 
         return P.view(*M_shape)
 
@@ -283,7 +328,7 @@ class OptimalTransportLayer(nn.Module):
 # --- testing ---
 #
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from torch.autograd import gradcheck
     from torch.nn.functional import normalize
 
@@ -293,52 +338,123 @@ if __name__ == '__main__':
     f = OptimalTransportFcn().apply
 
     print(torch.all(torch.isclose(sinkhorn(M), f(M))))
-    print(torch.all(torch.isclose(sinkhorn(M), sinkhorn(torch.exp(-1.0 * M), logspace=True))))
+    print(
+        torch.all(
+            torch.isclose(sinkhorn(M), sinkhorn(torch.exp(-1.0 * M), logspace=True))
+        )
+    )
 
-    test = gradcheck(f, (M, None, None, 1.0, 1.0e-6, 1000, False, 'block'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f,
+        (M, None, None, 1.0, 1.0e-6, 1000, False, "block"),
+        eps=1e-6,
+        atol=1e-3,
+        rtol=1e-6,
+    )
     print(test)
 
-    test = gradcheck(f, (torch.exp(-1.0 * M), None, None, 1.0, 1.0e-6, 1000, True, 'block'), eps=1e-6, atol=1e-3,
-                     rtol=1e-6)
+    test = gradcheck(
+        f,
+        (torch.exp(-1.0 * M), None, None, 1.0, 1.0e-6, 1000, True, "block"),
+        eps=1e-6,
+        atol=1e-3,
+        rtol=1e-6,
+    )
     print(test)
 
-    test = gradcheck(f, (M, None, None, 1.0, 1.0e-6, 1000, False, 'full'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f,
+        (M, None, None, 1.0, 1.0e-6, 1000, False, "full"),
+        eps=1e-6,
+        atol=1e-3,
+        rtol=1e-6,
+    )
     print(test)
 
-    test = gradcheck(f, (M, None, None, 10.0, 1.0e-6, 1000, False, 'block'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f,
+        (M, None, None, 10.0, 1.0e-6, 1000, False, "block"),
+        eps=1e-6,
+        atol=1e-3,
+        rtol=1e-6,
+    )
     print(test)
 
-    test = gradcheck(f, (M, None, None, 10.0, 1.0e-6, 1000, False, 'full'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f,
+        (M, None, None, 10.0, 1.0e-6, 1000, False, "full"),
+        eps=1e-6,
+        atol=1e-3,
+        rtol=1e-6,
+    )
     print(test)
 
-    r = normalize(torch.rand((M.shape[0], M.shape[1]), dtype=torch.double, requires_grad=False), p=1.0)
-    c = normalize(torch.rand((M.shape[0], M.shape[2]), dtype=torch.double, requires_grad=False), p=1.0)
+    r = normalize(
+        torch.rand((M.shape[0], M.shape[1]), dtype=torch.double, requires_grad=False),
+        p=1.0,
+    )
+    c = normalize(
+        torch.rand((M.shape[0], M.shape[2]), dtype=torch.double, requires_grad=False),
+        p=1.0,
+    )
 
-    test = gradcheck(f, (M, r, c, 1.0, 1.0e-9, 1000, False, 'block'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f, (M, r, c, 1.0, 1.0e-9, 1000, False, "block"), eps=1e-6, atol=1e-3, rtol=1e-6
+    )
     print(test)
 
     # with r and c inputs
-    r = normalize(torch.rand((M.shape[0], M.shape[1]), dtype=torch.double, requires_grad=True), p=1.0)
-    c = normalize(torch.rand((M.shape[0], M.shape[2]), dtype=torch.double, requires_grad=True), p=1.0)
+    r = normalize(
+        torch.rand((M.shape[0], M.shape[1]), dtype=torch.double, requires_grad=True),
+        p=1.0,
+    )
+    c = normalize(
+        torch.rand((M.shape[0], M.shape[2]), dtype=torch.double, requires_grad=True),
+        p=1.0,
+    )
 
-    test = gradcheck(f, (M, r, None, 1.0, 1.0e-6, 1000, False, 'block'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f,
+        (M, r, None, 1.0, 1.0e-6, 1000, False, "block"),
+        eps=1e-6,
+        atol=1e-3,
+        rtol=1e-6,
+    )
     print(test)
 
-    test = gradcheck(f, (M, None, c, 1.0, 1.0e-6, 1000, False, 'block'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f,
+        (M, None, c, 1.0, 1.0e-6, 1000, False, "block"),
+        eps=1e-6,
+        atol=1e-3,
+        rtol=1e-6,
+    )
     print(test)
 
-    test = gradcheck(f, (M, r, c, 1.0, 1.0e-6, 1000, False, 'block'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f, (M, r, c, 1.0, 1.0e-6, 1000, False, "block"), eps=1e-6, atol=1e-3, rtol=1e-6
+    )
     print(test)
 
-    test = gradcheck(f, (M, r, c, 10.0, 1.0e-6, 1000, False, 'block'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f, (M, r, c, 10.0, 1.0e-6, 1000, False, "block"), eps=1e-6, atol=1e-3, rtol=1e-6
+    )
     print(test)
 
     # shared r and c
-    r = normalize(torch.rand((1, M.shape[1]), dtype=torch.double, requires_grad=True), p=1.0)
-    c = normalize(torch.rand((1, M.shape[2]), dtype=torch.double, requires_grad=True), p=1.0)
+    r = normalize(
+        torch.rand((1, M.shape[1]), dtype=torch.double, requires_grad=True), p=1.0
+    )
+    c = normalize(
+        torch.rand((1, M.shape[2]), dtype=torch.double, requires_grad=True), p=1.0
+    )
 
-    test = gradcheck(f, (M, r, c, 1.0, 1.0e-6, 1000, False, 'block'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f, (M, r, c, 1.0, 1.0e-6, 1000, False, "block"), eps=1e-6, atol=1e-3, rtol=1e-6
+    )
     print(test)
 
-    test = gradcheck(f, (M, r, c, 1.0, 1.0e-6, 1000, False, 'full'), eps=1e-6, atol=1e-3, rtol=1e-6)
+    test = gradcheck(
+        f, (M, r, c, 1.0, 1.0e-6, 1000, False, "full"), eps=1e-6, atol=1e-3, rtol=1e-6
+    )
     print(test)

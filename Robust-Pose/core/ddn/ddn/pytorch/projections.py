@@ -14,14 +14,15 @@
 import torch
 import torch.nn.functional as F
 
-class Simplex():
+
+class Simplex:
     @staticmethod
-    def project(v, z = 1.0):
-        """ Euclidean projection of a batch of vectors onto a positive simplex
+    def project(v, z=1.0):
+        """Euclidean projection of a batch of vectors onto a positive simplex
 
         Solves:
             minimise_w 0.5 * || w - v ||_2^2
-            subject to sum_i w_i = z, w_i >= 0 
+            subject to sum_i w_i = z, w_i >= 0
 
         using the algorithm (Figure 1) from:
         [1] Efficient Projections onto the l1-Ball for Learning in High Dimensions,
@@ -47,18 +48,23 @@ class Simplex():
         """
         assert z > 0.0, "z must be strictly positive (%f <= 0)" % z
         # 1. Sort v into mu (decreasing)
-        mu, _ = v.sort(dim = -1, descending = True)
+        mu, _ = v.sort(dim=-1, descending=True)
         # 2. Find rho (number of strictly positive elements of optimal solution w)
-        mu_cumulative_sum = mu.cumsum(dim = -1)
-        rho = torch.sum(mu * torch.arange(1, v.size()[-1] + 1, dtype=v.dtype, device=v.device) > (mu_cumulative_sum - z), dim = -1, keepdim=True)
+        mu_cumulative_sum = mu.cumsum(dim=-1)
+        rho = torch.sum(
+            mu * torch.arange(1, v.size()[-1] + 1, dtype=v.dtype, device=v.device)
+            > (mu_cumulative_sum - z),
+            dim=-1,
+            keepdim=True,
+        )
         # 3. Compute the Lagrange multiplier theta associated with the simplex constraint
         theta = (torch.gather(mu_cumulative_sum, -1, (rho - 1)) - z) / rho.type(v.dtype)
         # 4. Compute projection
-        w = (v - theta).clamp(min = 0.0)
+        w = (v - theta).clamp(min=0.0)
         return w, None
 
     @staticmethod
-    def gradient(grad_output, output, input, is_outside = None):
+    def gradient(grad_output, output, input, is_outside=None):
         # Compute vector-Jacobian product (grad_output * Dy(x))
         # 1. Flatten:
         output_size = output.size()
@@ -67,18 +73,22 @@ class Simplex():
         grad_output = grad_output.flatten(end_dim=-2)
         # 2. Use implicit differentiation to compute derivative
         # Select active positivity constraints
-        mask = torch.where(output > 0.0, torch.ones_like(input), torch.zeros_like(input))
+        mask = torch.where(
+            output > 0.0, torch.ones_like(input), torch.zeros_like(input)
+        )
         masked_output = mask * grad_output
         grad_input = masked_output - mask * (
-            masked_output.sum(-1, keepdim=True) / mask.sum(-1, keepdim=True))
+            masked_output.sum(-1, keepdim=True) / mask.sum(-1, keepdim=True)
+        )
         # 3. Unflatten:
         grad_input = grad_input.reshape(output_size)
         return grad_input
 
+
 class L1Sphere(Simplex):
     @staticmethod
-    def project(v, z = 1.0):
-        """ Euclidean projection of a batch of vectors onto an L1-sphere
+    def project(v, z=1.0):
+        """Euclidean projection of a batch of vectors onto an L1-sphere
 
         Solves:
             minimise_w 0.5 * || w - v ||_2^2
@@ -120,7 +130,7 @@ class L1Sphere(Simplex):
         return w, None
 
     @staticmethod
-    def gradient(grad_output, output, input, is_outside = None):
+    def gradient(grad_output, output, input, is_outside=None):
         # Compute vector-Jacobian product (grad_output * Dy(x))
         # 1. Flatten:
         output_size = output.size()
@@ -129,15 +139,18 @@ class L1Sphere(Simplex):
         # 2. Use implicit differentiation to compute derivative
         DYh = output.sign()
         grad_input = DYh.abs() * grad_output - DYh * (
-            (DYh * grad_output).sum(-1, keepdim=True) / (DYh * DYh).sum(-1, keepdim=True))
+            (DYh * grad_output).sum(-1, keepdim=True)
+            / (DYh * DYh).sum(-1, keepdim=True)
+        )
         # 3. Unflatten:
         grad_input = grad_input.reshape(output_size)
         return grad_input
 
+
 class L1Ball(L1Sphere):
     @staticmethod
-    def project(v, z = 1.0):
-        """ Euclidean projection of a batch of vectors onto an L1-ball
+    def project(v, z=1.0):
+        """Euclidean projection of a batch of vectors onto an L1-ball
 
         Solves:
             minimise_w 0.5 * || w - v ||_2^2
@@ -182,10 +195,11 @@ class L1Ball(L1Sphere):
         grad_input = torch.where(is_outside, grad_input, grad_output)
         return grad_input
 
-class L2Sphere():
+
+class L2Sphere:
     @staticmethod
-    def project(v, z = 1.0):
-        """ Euclidean projection of a batch of vectors onto an L2-sphere
+    def project(v, z=1.0):
+        """Euclidean projection of a batch of vectors onto an L2-sphere
 
         Solves:
             minimise_w 0.5 * || w - v ||_2^2
@@ -207,15 +221,19 @@ class L2Sphere():
         """
         assert z > 0.0, "z must be strictly positive (%f <= 0)" % z
         # Replace v = 0 with unit vector:
-        mask = torch.isclose(v, torch.zeros_like(v), rtol=0.0, atol=1e-12).sum(dim=-1, keepdim=True) == v.size(-1)
-        unit_vector = torch.ones_like(v).div(torch.ones_like(v).norm(p=2, dim=-1, keepdim=True))
+        mask = torch.isclose(v, torch.zeros_like(v), rtol=0.0, atol=1e-12).sum(
+            dim=-1, keepdim=True
+        ) == v.size(-1)
+        unit_vector = torch.ones_like(v).div(
+            torch.ones_like(v).norm(p=2, dim=-1, keepdim=True)
+        )
         v = torch.where(mask, unit_vector, v)
         # Compute projection:
         w = z * v.div(v.norm(p=2, dim=-1, keepdim=True))
         return w, None
 
     @staticmethod
-    def gradient(grad_output, output, input, is_outside = None):
+    def gradient(grad_output, output, input, is_outside=None):
         # Compute vector-Jacobian product (grad_output * Dy(x))
         # ToDo: Check for div by zero
         # 1. Flatten:
@@ -227,16 +245,20 @@ class L2Sphere():
         output_norm = output.norm(p=2, dim=-1, keepdim=True)
         input_norm = input.norm(p=2, dim=-1, keepdim=True)
         ratio = output_norm.div(input_norm)
-        grad_input = ratio * (grad_output - output * (
-            output * grad_output).sum(-1, keepdim=True).div(output_norm.pow(2)))
+        grad_input = ratio * (
+            grad_output
+            - output
+            * (output * grad_output).sum(-1, keepdim=True).div(output_norm.pow(2))
+        )
         # 3. Unflatten:
         grad_input = grad_input.reshape(output_size)
         return grad_input
 
+
 class L2Ball(L2Sphere):
     @staticmethod
-    def project(v, z = 1.0):
-        """ Euclidean projection of a batch of vectors onto an L2-ball
+    def project(v, z=1.0):
+        """Euclidean projection of a batch of vectors onto an L2-ball
 
         Solves:
             minimise_w 0.5 * || w - v ||_2^2
@@ -273,10 +295,11 @@ class L2Ball(L2Sphere):
         grad_input = torch.where(is_outside, grad_input, grad_output)
         return grad_input
 
-class LInfSphere():
+
+class LInfSphere:
     @staticmethod
-    def project(v, z = 1.0):
-        """ Euclidean projection of a batch of vectors onto an LInf-sphere
+    def project(v, z=1.0):
+        """Euclidean projection of a batch of vectors onto an LInf-sphere
 
         Solves:
             minimise_w 0.5 * || w - v ||_2^2
@@ -310,7 +333,7 @@ class LInfSphere():
         return w, None
 
     @staticmethod
-    def gradient(grad_output, output, input, is_outside = None):
+    def gradient(grad_output, output, input, is_outside=None):
         # Compute vector-Jacobian product (grad_output * Dy(x))
         # 1. Flatten:
         output_size = output.size()
@@ -324,10 +347,11 @@ class LInfSphere():
         grad_input = grad_input.reshape(output_size)
         return grad_input
 
+
 class LInfBall(LInfSphere):
     @staticmethod
-    def project(v, z = 1.0):
-        """ Euclidean projection of a batch of vectors onto an LInf-ball
+    def project(v, z=1.0):
+        """Euclidean projection of a batch of vectors onto an LInf-ball
 
         Solves:
             minimise_w 0.5 * || w - v ||_2^2
@@ -351,7 +375,7 @@ class LInfBall(LInfSphere):
         # Using LInfSphere.project is more expensive here
         # 1. Take the absolute value of v
         u = v.abs()
-        is_outside = u.max(dim=-1, keepdim=True)[0].gt(z) # Store for backward pass
+        is_outside = u.max(dim=-1, keepdim=True)[0].gt(z)  # Store for backward pass
         # 2. Project u onto the (non-negative) LInf-sphere if outside
         # If u_i >= z, u_i = z
         z = torch.tensor(z, dtype=v.dtype, device=v.device)
@@ -369,10 +393,12 @@ class LInfBall(LInfSphere):
         grad_input = torch.where(is_outside, grad_input, grad_output)
         return grad_input
 
+
 class EuclideanProjectionFn(torch.autograd.Function):
     """
     A function to project a set of features to an Lp-sphere or Lp-ball
     """
+
     @staticmethod
     def forward(ctx, input, method, radius):
         output, is_outside = method.project(input, radius.item())
@@ -388,22 +414,19 @@ class EuclideanProjectionFn(torch.autograd.Function):
             grad_input = ctx.method.gradient(grad_output, output, input, is_outside)
         return grad_input, None, None
 
+
 class EuclideanProjection(torch.nn.Module):
-    def __init__(self, method, radius = 1.0):
-        super(EuclideanProjection, self).__init__()
+    def __init__(self, method, radius=1.0):
+        super().__init__()
         self.method = method
-        self.register_buffer('radius', torch.tensor([radius]))
+        self.register_buffer("radius", torch.tensor([radius]))
 
     def forward(self, input):
-        return EuclideanProjectionFn.apply(input,
-                                           self.method,
-                                           self.radius
-                                           )
+        return EuclideanProjectionFn.apply(input, self.method, self.radius)
 
     def extra_repr(self):
-        return 'method={}, radius={}'.format(
-            self.method.__name__, self.radius
-        )
+        return f"method={self.method.__name__}, radius={self.radius}"
+
 
 """ Check gradients
 from torch.autograd import gradcheck

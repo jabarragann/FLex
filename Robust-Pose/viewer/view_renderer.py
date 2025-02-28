@@ -1,19 +1,27 @@
-import numpy as np
-import cv2
 import os
+
+import cv2
+import numpy as np
 import torch
 
-class ViewRenderer(object):
+
+class ViewRenderer:
     def __init__(self, image_shape, outpath):
         super().__init__()
         import open3d as o3d
+
         self.image_height = image_shape[0]
         self.image_width = image_shape[1]
         self.viewer = o3d.visualization.VisualizerWithKeyCallback()
-        self.viewer.create_window(width=self.image_width,
-                             height=self.image_height, visible=True)
-        self.vid_writer = cv2.VideoWriter(os.path.join(outpath, 'vis.mp4'), cv2.VideoWriter_fourcc(*'MP4V'),
-                                     25.0, (image_shape[1], image_shape[0]-1))
+        self.viewer.create_window(
+            width=self.image_width, height=self.image_height, visible=True
+        )
+        self.vid_writer = cv2.VideoWriter(
+            os.path.join(outpath, "vis.mp4"),
+            cv2.VideoWriter_fourcc(*"MP4V"),
+            25.0,
+            (image_shape[1], image_shape[0] - 1),
+        )
         # get mesh
         self.control = self.viewer.get_view_control()
         self.ref_view = self.control.convert_to_pinhole_camera_parameters()
@@ -44,6 +52,7 @@ class ViewRenderer(object):
         self.viewer.update_renderer()
         # self.viewer.run()
         image = self.viewer.capture_screen_float_buffer(False)
-        self.vid_writer.write(cv2.cvtColor((255*np.asarray(image)).astype(np.uint8), cv2.COLOR_RGB2BGR))
+        self.vid_writer.write(
+            cv2.cvtColor((255 * np.asarray(image)).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        )
         return image
-

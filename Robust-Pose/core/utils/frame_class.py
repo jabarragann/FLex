@@ -1,13 +1,22 @@
-import torch
 from typing import Union
+
+import torch
 
 
 class Frame:
     """
-        Class containing image, depth and normals
+    Class containing image, depth and normals
     """
-    def __init__(self, img: torch.Tensor, rimg: torch.Tensor=None, depth: torch.Tensor=None,
-                 mask: torch.Tensor=None, confidence: torch.Tensor=None, flow: torch.Tensor=None):
+
+    def __init__(
+        self,
+        img: torch.Tensor,
+        rimg: torch.Tensor = None,
+        depth: torch.Tensor = None,
+        mask: torch.Tensor = None,
+        confidence: torch.Tensor = None,
+        flow: torch.Tensor = None,
+    ):
         """
 
         :param img: RGB image in range (0, 255) with shape Nx3xHxW
@@ -24,16 +33,24 @@ class Frame:
             self.rimg = rimg.contiguous()
 
         if mask is None:
-            mask = torch.ones((1,1,*self.shape), dtype=torch.bool, device=self.device)
+            mask = torch.ones((1, 1, *self.shape), dtype=torch.bool, device=self.device)
         self.mask = mask.bool()
 
         if depth is None:
-            self.depth = torch.ones((1,1,*self.shape), device=self.device)
+            self.depth = torch.ones((1, 1, *self.shape), device=self.device)
         else:
             self.depth = depth.contiguous()
 
-        self.confidence = confidence.contiguous() if confidence is not None else torch.ones((1,1,*self.shape), device=self.device)
-        self.flow = flow.contiguous() if flow is not None else torch.zeros((1,2,*self.shape), device=self.device)
+        self.confidence = (
+            confidence.contiguous()
+            if confidence is not None
+            else torch.ones((1, 1, *self.shape), device=self.device)
+        )
+        self.flow = (
+            flow.contiguous()
+            if flow is not None
+            else torch.zeros((1, 2, *self.shape), device=self.device)
+        )
 
         assert self.rimg.shape == self.img.shape
         assert self.img.shape[-2:] == self.depth.shape[-2:]
@@ -59,25 +76,26 @@ class Frame:
 
     def plot(self):
         import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(2,3)
-        img,rimg, depth, mask, confidence = self.to_numpy()
+
+        fig, ax = plt.subplots(2, 3)
+        img, rimg, depth, mask, confidence = self.to_numpy()
         ax[0, 0].imshow(img)
-        ax[0, 0].set_title('img left')
+        ax[0, 0].set_title("img left")
         ax[0, 1].imshow(rimg)
-        ax[0, 1].set_title('img right')
+        ax[0, 1].set_title("img right")
         ax[0, 2].imshow(depth)
-        ax[0, 2].set_title('depth')
+        ax[0, 2].set_title("depth")
         ax[1, 0].imshow(mask, vmin=0, vmax=1, interpolation=None)
-        ax[1, 0].set_title('mask')
+        ax[1, 0].set_title("mask")
         ax[1, 1].imshow(confidence, vmin=0, vmax=1, interpolation=None)
-        ax[1, 1].set_title('confidence')
+        ax[1, 1].set_title("confidence")
         for a in ax.flatten():
-            a.axis('off')
+            a.axis("off")
         plt.show()
 
     def to_numpy(self):
-        img = self.img.detach().cpu().permute(0,2,3,1).squeeze().numpy()/255.0
-        rimg = self.rimg.detach().cpu().permute(0, 2, 3, 1).squeeze().numpy()/255.0
+        img = self.img.detach().cpu().permute(0, 2, 3, 1).squeeze().numpy() / 255.0
+        rimg = self.rimg.detach().cpu().permute(0, 2, 3, 1).squeeze().numpy() / 255.0
         depth = self.depth.detach().cpu().squeeze().numpy()
         mask = self.mask.detach().cpu().squeeze().numpy()
         confidence = self.confidence.detach().cpu().squeeze().numpy()

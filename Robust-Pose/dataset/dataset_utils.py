@@ -1,65 +1,83 @@
+import glob
 import os
 import sys
-import glob
-from dataset.video_dataset import StereoVideoDataset
-from dataset.image_dataset import StereoImageDataset
-from dataset.stereo_dataset import StereoDataset
-from dataset.rectification import StereoRectifier
 from typing import Tuple
+
+from dataset.image_dataset import StereoImageDataset
+from dataset.rectification import StereoRectifier
+from dataset.stereo_dataset import StereoDataset
+from dataset.video_dataset import StereoVideoDataset
 from torch.utils.data import Sampler
 
 
-def get_data(input_path: str, img_size: Tuple, sample_video: int=1, rect_mode: str='conventional'):
-
+def get_data(
+    input_path: str,
+    img_size: Tuple,
+    sample_video: int = 1,
+    rect_mode: str = "conventional",
+):
     # check the format of the calibration file
     img_size = tuple(img_size)
-    if os.path.isfile(os.path.join(input_path, 'camcal.json')):
-        calib_file = os.path.join(input_path, 'camcal.json')
-    elif os.path.isfile(os.path.join(input_path, 'camera_calibration.json')):
-        calib_file = os.path.join(input_path, 'camera_calibration.json')
-    elif os.path.isfile(os.path.join(input_path, 'StereoCalibration.ini')):
-        calib_file = os.path.join(input_path, 'StereoCalibration.ini')
-    elif os.path.isfile(os.path.join(input_path, 'endoscope_calibration.yaml')):
-        calib_file = os.path.join(input_path, 'endoscope_calibration.yaml')
+    if os.path.isfile(os.path.join(input_path, "camcal.json")):
+        calib_file = os.path.join(input_path, "camcal.json")
+    elif os.path.isfile(os.path.join(input_path, "camera_calibration.json")):
+        calib_file = os.path.join(input_path, "camera_calibration.json")
+    elif os.path.isfile(os.path.join(input_path, "StereoCalibration.ini")):
+        calib_file = os.path.join(input_path, "StereoCalibration.ini")
+    elif os.path.isfile(os.path.join(input_path, "endoscope_calibration.yaml")):
+        calib_file = os.path.join(input_path, "endoscope_calibration.yaml")
     else:
-        raise RuntimeError(f'no valid calibration file found in {input_path}')
+        raise RuntimeError(f"no valid calibration file found in {input_path}")
 
     rect = StereoRectifier(calib_file, img_size_new=img_size, mode=rect_mode)
     calib = rect.get_rectified_calib()
     try:
-        dataset = StereoDataset(input_path, img_size=calib['img_size'])
+        dataset = StereoDataset(input_path, img_size=calib["img_size"])
         print(" Stereo Dataset")
     except AssertionError:
-        video_file = glob.glob(os.path.join(input_path, '*.mp4'))[0]
-        pose_file = os.path.join(input_path, 'groundtruth.txt')
-        dataset = StereoVideoDataset(video_file, pose_file, img_size=calib['img_size'], sample=sample_video, rectify=rect)
+        video_file = glob.glob(os.path.join(input_path, "*.mp4"))[0]
+        pose_file = os.path.join(input_path, "groundtruth.txt")
+        dataset = StereoVideoDataset(
+            video_file,
+            pose_file,
+            img_size=calib["img_size"],
+            sample=sample_video,
+            rectify=rect,
+        )
         print(" Stereo Video Dataset")
     return dataset, calib
 
-def get_data_images(input_path: str, img_size: Tuple, sample_video: int=1, rect_mode: str='conventional'):
 
+def get_data_images(
+    input_path: str,
+    img_size: Tuple,
+    sample_video: int = 1,
+    rect_mode: str = "conventional",
+):
     # check the format of the calibration file
     img_size = tuple(img_size)
-    if os.path.isfile(os.path.join(input_path, 'camcal.json')):
-        calib_file = os.path.join(input_path, 'camcal.json')
-    elif os.path.isfile(os.path.join(input_path, 'camera_calibration.json')):
-        calib_file = os.path.join(input_path, 'camera_calibration.json')
-    elif os.path.isfile(os.path.join(input_path, 'StereoCalibration.ini')):
-        calib_file = os.path.join(input_path, 'StereoCalibration.ini')
-    elif os.path.isfile(os.path.join(input_path, 'endoscope_calibration.yaml')):
-        calib_file = os.path.join(input_path, 'endoscope_calibration.yaml')
+    if os.path.isfile(os.path.join(input_path, "camcal.json")):
+        calib_file = os.path.join(input_path, "camcal.json")
+    elif os.path.isfile(os.path.join(input_path, "camera_calibration.json")):
+        calib_file = os.path.join(input_path, "camera_calibration.json")
+    elif os.path.isfile(os.path.join(input_path, "StereoCalibration.ini")):
+        calib_file = os.path.join(input_path, "StereoCalibration.ini")
+    elif os.path.isfile(os.path.join(input_path, "endoscope_calibration.yaml")):
+        calib_file = os.path.join(input_path, "endoscope_calibration.yaml")
     else:
-        raise RuntimeError(f'no valid calibration file found in {input_path}')
+        raise RuntimeError(f"no valid calibration file found in {input_path}")
 
     rect = StereoRectifier(calib_file, img_size_new=img_size, mode=rect_mode)
     calib = rect.get_rectified_calib()
     try:
-        dataset = StereoDataset(input_path, img_size=calib['img_size'])
+        dataset = StereoDataset(input_path, img_size=calib["img_size"])
         print(" Stereo Dataset")
     except AssertionError:
-        limage_folder = glob.glob(os.path.join(input_path, 'left_images'))[0]
-        rimage_folder = glob.glob(os.path.join(input_path, 'right_images'))[0]
-        dataset = StereoImageDataset(limage_folder, rimage_folder, img_size=calib['img_size'], rectify=rect)
+        limage_folder = glob.glob(os.path.join(input_path, "left_images"))[0]
+        rimage_folder = glob.glob(os.path.join(input_path, "right_images"))[0]
+        dataset = StereoImageDataset(
+            limage_folder, rimage_folder, img_size=calib["img_size"], rectify=rect
+        )
         print(" Stereo Image Dataset")
     return dataset, calib
 
@@ -72,7 +90,7 @@ class SequentialSubSampler(Sampler):
         :param step: subsample step
     """
 
-    def __init__(self, data_source, start: int= 0, stop: int=-1, step: int=1):
+    def __init__(self, data_source, start: int = 0, stop: int = -1, step: int = 1):
         self.data_source = data_source
         self.start = start
         self.stop = stop
@@ -84,4 +102,4 @@ class SequentialSubSampler(Sampler):
         return iter(range(self.start, l, self.step))
 
     def __len__(self):
-        return int(len(self.data_source)/self.step)
+        return int(len(self.data_source) / self.step)

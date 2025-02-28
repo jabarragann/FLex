@@ -13,12 +13,13 @@
 
 import torch
 
-class Quadratic():
+
+class Quadratic:
     is_convex = True
 
     @staticmethod
-    def phi(z, alpha = 1.0):
-        """ Quadratic penalty function
+    def phi(z, alpha=1.0):
+        """Quadratic penalty function
 
         phi(z; alpha) = 0.5 * z^2
 
@@ -40,17 +41,18 @@ class Quadratic():
         return phi_at_z
 
     @staticmethod
-    def Dy(z, alpha = 1.0):
+    def Dy(z, alpha=1.0):
         # Derivative of y(x) for the quadratic penalty function
         Dy_at_x = torch.ones_like(z) / (z.size(-1) * z.size(-2))
         return Dy_at_x
 
-class PseudoHuber():
+
+class PseudoHuber:
     is_convex = True
 
     @staticmethod
-    def phi(z, alpha = 1.0):
-        """ Pseudo-Huber penalty function
+    def phi(z, alpha=1.0):
+        """Pseudo-Huber penalty function
 
         phi(z; alpha) = alpha^2 (sqrt{1 + (z / alpha)^2} - 1)
 
@@ -75,19 +77,20 @@ class PseudoHuber():
         return phi_at_z
 
     @staticmethod
-    def Dy(z, alpha = 1.0):
+    def Dy(z, alpha=1.0):
         # Derivative of y(x) for the pseudo-Huber penalty function
         w = torch.pow(1.0 + torch.pow(z, 2) / (alpha * alpha), -1.5)
         w_sum = w.sum(dim=-1, keepdim=True).sum(dim=-2, keepdim=True).expand_as(w)
         Dy_at_x = torch.where(w_sum.abs() <= 1e-9, torch.zeros_like(w), w.div(w_sum))
         return Dy_at_x
 
-class Huber():
+
+class Huber:
     is_convex = True
 
     @staticmethod
-    def phi(z, alpha = 1.0):
-        """ Huber penalty function
+    def phi(z, alpha=1.0):
+        r"""Huber penalty function
 
                         / 0.5 z^2 for |z| <= alpha
         phi(z; alpha) = |
@@ -110,23 +113,26 @@ class Huber():
         """
         assert alpha > 0.0, "alpha must be strictly positive (%f <= 0)" % alpha
         z = z.abs()
-        phi_at_z = torch.where(z <= alpha, 0.5 * torch.pow(z, 2), alpha * (z - 0.5 * alpha))
+        phi_at_z = torch.where(
+            z <= alpha, 0.5 * torch.pow(z, 2), alpha * (z - 0.5 * alpha)
+        )
         return phi_at_z
 
     @staticmethod
-    def Dy(z, alpha = 1.0):
+    def Dy(z, alpha=1.0):
         # Derivative of y(x) for the Huber penalty function
         w = torch.where(z.abs() <= alpha, torch.ones_like(z), torch.zeros_like(z))
         w_sum = w.sum(dim=-1, keepdim=True).sum(dim=-2, keepdim=True).expand_as(w)
         Dy_at_x = torch.where(w_sum.abs() <= 1e-9, torch.zeros_like(w), w.div(w_sum))
         return Dy_at_x
 
-class Welsch():
+
+class Welsch:
     is_convex = False
 
     @staticmethod
-    def phi(z, alpha = 1.0):
-        """ Welsch penalty function
+    def phi(z, alpha=1.0):
+        """Welsch penalty function
 
         phi(z; alpha) = 1 - exp(-0.5 * z^2 / alpha^2)
 
@@ -149,22 +155,23 @@ class Welsch():
         return phi_at_z
 
     @staticmethod
-    def Dy(z, alpha = 1.0):
+    def Dy(z, alpha=1.0):
         # Derivative of y(x) for the Welsch penalty function
         alpha2 = alpha * alpha
         z2_on_alpha2 = torch.pow(z, 2) / alpha2
         w = (1.0 - z2_on_alpha2) * torch.exp(-0.5 * z2_on_alpha2) / alpha2
         w_sum = w.sum(dim=-1, keepdim=True).sum(dim=-2, keepdim=True).expand_as(w)
         Dy_at_x = torch.where(w_sum.abs() <= 1e-9, torch.zeros_like(w), w.div(w_sum))
-        Dy_at_x = torch.clamp(Dy_at_x, -1.0, 1.0) # Clip gradients to +/- 1
+        Dy_at_x = torch.clamp(Dy_at_x, -1.0, 1.0)  # Clip gradients to +/- 1
         return Dy_at_x
 
-class TruncatedQuadratic():
+
+class TruncatedQuadratic:
     is_convex = False
 
     @staticmethod
-    def phi(z, alpha = 1.0):
-        """ Truncated quadratic penalty function
+    def phi(z, alpha=1.0):
+        r"""Truncated quadratic penalty function
 
                         / 0.5 z^2 for |z| <= alpha
         phi(z; alpha) = |
@@ -186,39 +193,48 @@ class TruncatedQuadratic():
         """
         assert alpha > 0.0, "alpha must be strictly positive (%f <= 0)" % alpha
         z = z.abs()
-        phi_at_z = torch.where(z <= alpha, 0.5 * torch.pow(z, 2), 0.5 * alpha * alpha * torch.ones_like(z))
+        phi_at_z = torch.where(
+            z <= alpha, 0.5 * torch.pow(z, 2), 0.5 * alpha * alpha * torch.ones_like(z)
+        )
         return phi_at_z
 
     @staticmethod
-    def Dy(z, alpha = 1.0):
+    def Dy(z, alpha=1.0):
         # Derivative of y(x) for the truncated quadratic penalty function
         w = torch.where(z.abs() <= alpha, torch.ones_like(z), torch.zeros_like(z))
         w_sum = w.sum(dim=-1, keepdim=True).sum(dim=-2, keepdim=True).expand_as(w)
         Dy_at_x = torch.where(w_sum.abs() <= 1e-9, torch.zeros_like(w), w.div(w_sum))
         return Dy_at_x
 
+
 class RobustGlobalPool2dFn(torch.autograd.Function):
     """
     A function to globally pool a 2D response matrix using a robust penalty function
     """
+
     @staticmethod
     def runOptimisation(x, y, method, alpha_scalar):
         with torch.enable_grad():
-            opt = torch.optim.LBFGS([y],
-                                    lr=1, # Default: 1
-                                    max_iter=100, # Default: 20
-                                    max_eval=None, # Default: None
-                                    tolerance_grad=1e-05, # Default: 1e-05
-                                    tolerance_change=1e-09, # Default: 1e-09
-                                    history_size=100, # Default: 100
-                                    line_search_fn=None # Default: None, Alternative: "strong_wolfe"
-                                    )
+            opt = torch.optim.LBFGS(
+                [y],
+                lr=1,  # Default: 1
+                max_iter=100,  # Default: 20
+                max_eval=None,  # Default: None
+                tolerance_grad=1e-05,  # Default: 1e-05
+                tolerance_change=1e-09,  # Default: 1e-09
+                history_size=100,  # Default: 100
+                line_search_fn=None,  # Default: None, Alternative: "strong_wolfe"
+            )
+
             def reevaluate():
                 opt.zero_grad()
                 # Sum cost function across residuals and batch (all fi are positive)
-                f = method.phi(y.unsqueeze(-1).unsqueeze(-1) - x, alpha=alpha_scalar).sum()
+                f = method.phi(
+                    y.unsqueeze(-1).unsqueeze(-1) - x, alpha=alpha_scalar
+                ).sum()
                 f.backward()
                 return f
+
             opt.step(reevaluate)
         return y
 
@@ -227,7 +243,9 @@ class RobustGlobalPool2dFn(torch.autograd.Function):
         input_size = x.size()
         assert len(input_size) >= 2, "input must at least 2D (%d < 2)" % len(input_size)
         alpha_scalar = alpha.item()
-        assert alpha.item() > 0.0, "alpha must be strictly positive (%f <= 0)" % alpha.item()
+        assert alpha.item() > 0.0, (
+            "alpha must be strictly positive (%f <= 0)" % alpha.item()
+        )
         x = x.detach()
         x = x.flatten(end_dim=-3) if len(input_size) > 2 else x
         # Handle non-convex functions separately
@@ -239,11 +257,25 @@ class RobustGlobalPool2dFn(torch.autograd.Function):
             # Use mean and median as initial guesses and choose the best
             # ToDo: multiple random starts
             y_mean = x.mean([-2, -1]).clone().requires_grad_()
-            y_mean = RobustGlobalPool2dFn.runOptimisation(x, y_mean, method, alpha_scalar)
-            y_median = x.flatten(start_dim=-2).median(dim=-1)[0].clone().requires_grad_()
-            y_median = RobustGlobalPool2dFn.runOptimisation(x, y_median, method, alpha_scalar)
-            f_mean = method.phi(y_mean.unsqueeze(-1).unsqueeze(-1) - x, alpha=alpha_scalar).sum(-1).sum(-1)
-            f_median = method.phi(y_median.unsqueeze(-1).unsqueeze(-1) - x, alpha=alpha_scalar).sum(-1).sum(-1)
+            y_mean = RobustGlobalPool2dFn.runOptimisation(
+                x, y_mean, method, alpha_scalar
+            )
+            y_median = (
+                x.flatten(start_dim=-2).median(dim=-1)[0].clone().requires_grad_()
+            )
+            y_median = RobustGlobalPool2dFn.runOptimisation(
+                x, y_median, method, alpha_scalar
+            )
+            f_mean = (
+                method.phi(y_mean.unsqueeze(-1).unsqueeze(-1) - x, alpha=alpha_scalar)
+                .sum(-1)
+                .sum(-1)
+            )
+            f_median = (
+                method.phi(y_median.unsqueeze(-1).unsqueeze(-1) - x, alpha=alpha_scalar)
+                .sum(-1)
+                .sum(-1)
+            )
             y = torch.where(f_mean <= f_median, y_mean, y_median)
         y = y.detach()
         z = (y.unsqueeze(-1).unsqueeze(-1) - x).clone()
@@ -267,22 +299,19 @@ class RobustGlobalPool2dFn(torch.autograd.Function):
             grad_input = grad_input.reshape(input_size)
         return grad_input, None, None
 
+
 class RobustGlobalPool2d(torch.nn.Module):
     def __init__(self, method, alpha=1.0):
-        super(RobustGlobalPool2d, self).__init__()
+        super().__init__()
         self.method = method
-        self.register_buffer('alpha', torch.tensor([alpha]))
+        self.register_buffer("alpha", torch.tensor([alpha]))
 
     def forward(self, input):
-        return RobustGlobalPool2dFn.apply(input,
-                                          self.method,
-                                          self.alpha
-                                          )
+        return RobustGlobalPool2dFn.apply(input, self.method, self.alpha)
 
     def extra_repr(self):
-        return 'method={}, alpha={}'.format(
-            self.method, self.alpha
-        )
+        return f"method={self.method}, alpha={self.alpha}"
+
 
 """ Check gradients
 from torch.autograd import gradcheck

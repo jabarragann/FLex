@@ -11,10 +11,10 @@ from torch.utils.tensorboard import SummaryWriter
 from config.config import Config
 from flex.dataloader import get_test_dataset, get_train_dataset
 from flex.model import init_model
-from flex.render.render import evaluation, evaluation_path, evaluation_local
+from flex.render.render import evaluation, evaluation_local, evaluation_path
 from flex.render.trainer import Trainer
+from flex.render.util.util import get_all_poses
 from local.util import preprocess_partitioning
-from flex.render.util.util import get_all_poses 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.set_default_dtype(torch.float32)
@@ -22,14 +22,19 @@ torch.set_default_dtype(torch.float32)
 
 def render_test(cfg):
     test_dataset = get_test_dataset(cfg, is_stack=True)
-    if not cfg.only_pose_metrics and not cfg.test_weights and not cfg.render_extra and not cfg.render_new_poses:
+    if (
+        not cfg.only_pose_metrics
+        and not cfg.test_weights
+        and not cfg.render_extra
+        and not cfg.render_new_poses
+    ):
         train_dataset = get_train_dataset(cfg, is_stack=True)
     else:
-        train_dataset=None
+        train_dataset = None
     ndc_ray = test_dataset.ndc_ray
     white_bg = test_dataset.white_bg
-    assert (cfg.model.predict_flow == cfg.data.flow_data)
-    
+    assert cfg.model.predict_flow == cfg.data.flow_data
+
     if cfg.local_models:
         logfolder = os.path.dirname(cfg.systems.ckpt)
         # modelsdirectory = (cfg.systems.ckpt).split(".")[0] # A bit hacky --> TODO: make this easier
@@ -38,11 +43,11 @@ def render_test(cfg):
         image_bounds = torch.load(modelsdirectory + "_image_bounds.th")
         world2hexs = torch.load(modelsdirectory + "_world2hexs.th")
         if cfg.local.progressive_opt:
-            poses_rot = torch.load(modelsdirectory+"_poses_rot.th")
-            poses_t = torch.load(modelsdirectory+"_poses_t.th")
-            #poses_rot = poses_rot[:101]
-            #poses_t = poses_t[:101]
-            blending_weights = torch.load(modelsdirectory+"_blending_weights.th")
+            poses_rot = torch.load(modelsdirectory + "_poses_rot.th")
+            poses_t = torch.load(modelsdirectory + "_poses_t.th")
+            # poses_rot = poses_rot[:101]
+            # poses_t = poses_t[:101]
+            blending_weights = torch.load(modelsdirectory + "_blending_weights.th")
         else:
             poses_rot, poses_t = None, None
         if cfg.render_test:
@@ -67,8 +72,7 @@ def render_test(cfg):
                 blending_weights=blending_weights,
             )
 
-    else:     
-
+    else:
         if not os.path.exists(cfg.systems.ckpt):
             print("the ckpt path does not exists!!")
             return
@@ -76,7 +80,9 @@ def render_test(cfg):
         HexPlane = torch.load(cfg.systems.ckpt, map_location=device)
         logfolder = os.path.dirname(cfg.systems.ckpt)
 
-        all_poses, train_images_idxs = get_all_poses(train_dataset, test_dataset, len(test_dataset)+len(train_dataset))
+        all_poses, train_images_idxs = get_all_poses(
+            train_dataset, test_dataset, len(test_dataset) + len(train_dataset)
+        )
 
         if cfg.render_train:
             os.makedirs(f"{logfolder}/imgs_train_all", exist_ok=True)
@@ -139,11 +145,10 @@ def reconstruction(cfg):
     white_bg = test_dataset.white_bg
     near_far = test_dataset.near_far
 
-    assert (cfg.model.predict_flow == cfg.data.flow_data)
-
+    assert cfg.model.predict_flow == cfg.data.flow_data
 
     if cfg.systems.add_timestamp:
-        logfolder = f'{cfg.systems.basedir}/{cfg.expname}{datetime.datetime.now().strftime("-%Y%m%d-%H%M%S")}'
+        logfolder = f"{cfg.systems.basedir}/{cfg.expname}{datetime.datetime.now().strftime('-%Y%m%d-%H%M%S')}"
     else:
         logfolder = f"{cfg.systems.basedir}/{cfg.expname}"
 
@@ -174,12 +179,12 @@ def reconstruction(cfg):
     )
 
     trainer.train()
-    print(f"Training time: {(time.time()-start_time)/60} min.")
+    print(f"Training time: {(time.time() - start_time) / 60} min.")
     torch.save(HexPlane, f"{logfolder}/{cfg.expname}.th")
 
     # Display final model parameters
     total_params = sum(p.numel() for p in HexPlane.parameters() if p.requires_grad)
-    print(f"Model contains {total_params/1000000} Mil. parameters")
+    print(f"Model contains {total_params / 1000000} Mil. parameters")
 
     # Render training viewpoints.
     if cfg.render_train:
@@ -212,8 +217,8 @@ def reconstruction(cfg):
             ndc_ray=ndc_ray,
             white_bg=white_bg,
             device=device,
-            poses_rot=trainer.all_poses[:,:3,:3],
-            poses_t=trainer.all_poses[:,:3,3],
+            poses_rot=trainer.all_poses[:, :3, :3],
+            poses_t=trainer.all_poses[:, :3, 3],
         )
 
     # Render validation viewpoints.
@@ -236,9 +241,9 @@ def reconstruction(cfg):
 def reconstruction_local(cfg):
     if cfg.local.progressive_opt:
         # must be pre-defined with fixed bound due to pose optimization
-        if cfg.data.cal_fine_bbox!=False:
-            cfg.data.cal_fine_bbox=False
-            
+        if cfg.data.cal_fine_bbox != False:
+            cfg.data.cal_fine_bbox = False
+
     if cfg.data.datasampler_type == "rays":
         train_dataset = get_train_dataset(cfg, is_stack=False)
     else:
@@ -248,10 +253,10 @@ def reconstruction_local(cfg):
     white_bg = test_dataset.white_bg
     near_far = test_dataset.near_far
 
-    assert (cfg.model.predict_flow == cfg.data.flow_data)
+    assert cfg.model.predict_flow == cfg.data.flow_data
 
     if cfg.systems.add_timestamp:
-        logfolder = f'{cfg.systems.basedir}/{cfg.expname}{datetime.datetime.now().strftime("-%Y%m%d-%H%M%S")}'
+        logfolder = f"{cfg.systems.basedir}/{cfg.expname}{datetime.datetime.now().strftime('-%Y%m%d-%H%M%S')}"
     else:
         logfolder = f"{cfg.systems.basedir}/{cfg.expname}"
 
@@ -267,20 +272,27 @@ def reconstruction_local(cfg):
 
     # pre-partition models
     if not cfg.local.progressive_opt:
-        aabb_lists, image_bounds, world2hexs = preprocess_partitioning(cfg, train_dataset, device)
+        aabb_lists, image_bounds, world2hexs = preprocess_partitioning(
+            cfg, train_dataset, device
+        )
 
         # save image bounds and world2hex coordinates:
-        torch.save(torch.tensor(image_bounds), f"{logfolder}/{cfg.expname}_image_bounds.th")
-        torch.save(torch.tensor(torch.stack(world2hexs,0)), f"{logfolder}/{cfg.expname}_world2hexs.th")
+        torch.save(
+            torch.tensor(image_bounds), f"{logfolder}/{cfg.expname}_image_bounds.th"
+        )
+        torch.save(
+            torch.tensor(torch.stack(world2hexs, 0)),
+            f"{logfolder}/{cfg.expname}_world2hexs.th",
+        )
         # init model.
         start_time = time.time()
         for idx in range(len(aabb_lists)):
-            print("Start training model "+str(idx)+"/"+str(len(aabb_lists)))
-            #aabb = train_dataset.scene_bbox.to(device)
+            print("Start training model " + str(idx) + "/" + str(len(aabb_lists)))
+            # aabb = train_dataset.scene_bbox.to(device)
             aabb = aabb_lists[idx].to(device)
             image_bound = image_bounds[idx]
             world2hex = world2hexs[idx]
-            
+
             HexPlane, reso_cur = init_model(cfg, aabb, near_far, device)
 
             # init trainer.
@@ -302,42 +314,61 @@ def reconstruction_local(cfg):
             torch.save(HexPlane, f"{logfolder}/{cfg.expname}_{idx}.th")
             # empty cuda memory
             torch.cuda.empty_cache()
-        print(f"Training time: {(time.time()-start_time)/60} min.")
+        print(f"Training time: {(time.time() - start_time) / 60} min.")
     else:
         aabb = train_dataset.scene_bbox.to(device)
         first_HexPlane, reso_cur = init_model(cfg, aabb, near_far, device)
         start_time = time.time()
         # init trainer
         trainer = Trainer(
-                first_HexPlane,
-                cfg,
-                reso_cur,
-                train_dataset,
-                test_dataset,
-                summary_writer,
-                logfolder,
-                device,
-            )
+            first_HexPlane,
+            cfg,
+            reso_cur,
+            train_dataset,
+            test_dataset,
+            summary_writer,
+            logfolder,
+            device,
+        )
 
         trainer.train()
-        print(f"Training time: {(time.time()-start_time)/60} min.")
+        print(f"Training time: {(time.time() - start_time) / 60} min.")
 
         # Save rotation and translation matrices:
-        torch.save(torch.stack(list(trainer.poses_rot), 0), f"{logfolder}/{cfg.expname}_poses_rot.th")
-        torch.save(torch.stack(list(trainer.poses_t), 0), f"{logfolder}/{cfg.expname}_poses_t.th")
+        torch.save(
+            torch.stack(list(trainer.poses_rot), 0),
+            f"{logfolder}/{cfg.expname}_poses_rot.th",
+        )
+        torch.save(
+            torch.stack(list(trainer.poses_t), 0),
+            f"{logfolder}/{cfg.expname}_poses_t.th",
+        )
         # save image bounds and world2hex coordinates:
-        torch.save(torch.tensor(trainer.image_bounds), f"{logfolder}/{cfg.expname}_image_bounds.th")
-        torch.save(torch.stack(list(trainer.world2hexs),0), f"{logfolder}/{cfg.expname}_world2hexs.th")
+        torch.save(
+            torch.tensor(trainer.image_bounds),
+            f"{logfolder}/{cfg.expname}_image_bounds.th",
+        )
+        torch.save(
+            torch.stack(list(trainer.world2hexs), 0),
+            f"{logfolder}/{cfg.expname}_world2hexs.th",
+        )
         # save blending weights:
-        torch.save(torch.stack(list(trainer.blending_weights),0), f"{logfolder}/{cfg.expname}_blending_weights.th")
+        torch.save(
+            torch.stack(list(trainer.blending_weights), 0),
+            f"{logfolder}/{cfg.expname}_blending_weights.th",
+        )
         # for configuration save initial model again --> not really needed
         torch.save(first_HexPlane, f"{logfolder}/{cfg.expname}.th")
 
     total_params = 0
     for model_id in range(0, len(trainer.hexplanes)):
-        total_params += sum(p.numel() for p in trainer.hexplanes[model_id].parameters() if p.requires_grad)
+        total_params += sum(
+            p.numel()
+            for p in trainer.hexplanes[model_id].parameters()
+            if p.requires_grad
+        )
 
-    print(f"Model contains {total_params/1000000} Mil. parameters")
+    print(f"Model contains {total_params / 1000000} Mil. parameters")
 
     # Render test viewpoints.
     modelsdirectory = f"{logfolder}/{cfg.expname}"
@@ -358,9 +389,19 @@ def reconstruction_local(cfg):
             image_bounds=trainer.image_bounds,
             world2hexs=trainer.world2hexs,
             num_train_images=trainer.image_bounds[-1][1],
-            poses_rot=torch.stack(list(trainer.poses_rot),0) if cfg.local.progressive_opt else None,
-            poses_t=torch.stack(list(trainer.poses_t),0) if cfg.local.progressive_opt else None,
-            blending_weights=trainer.blending_weights if cfg.local.progressive_opt else None,
+            poses_rot=(
+                torch.stack(list(trainer.poses_rot), 0)
+                if cfg.local.progressive_opt
+                else None
+            ),
+            poses_t=(
+                torch.stack(list(trainer.poses_t), 0)
+                if cfg.local.progressive_opt
+                else None
+            ),
+            blending_weights=(
+                trainer.blending_weights if cfg.local.progressive_opt else None
+            ),
         )
 
 
@@ -377,6 +418,8 @@ if __name__ == "__main__":
     else:
         yaml_cfg = OmegaConf.create()
     cfg = OmegaConf.merge(base_cfg, yaml_cfg, cli_cfg)  # merge configs
+
+    print(f"Experiment name {cfg.expname}")
 
     # Fix Random Seed for Reproducibility.
     random.seed(cfg.systems.seed)

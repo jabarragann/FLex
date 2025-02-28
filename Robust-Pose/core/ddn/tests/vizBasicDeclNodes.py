@@ -8,20 +8,21 @@
 #   $ python vizBasicDeclNodes.py
 #
 
+import matplotlib.pyplot as plt
 import numpy as np
-
 from ddn.basic.node import *
-from ddn.basic.sample_nodes import *
 from ddn.basic.robust_nodes import *
-
+from ddn.basic.sample_nodes import *
 from testBasicDeclNodes import computeValueAndGradients
 
-import matplotlib.pyplot as plt
-plt.rc('font', family='serif')
+plt.rc("font", family="serif")
 
 # --- visualization and test routine ----------------------------------------------------------------------------------
 
-def vizAndTestProblem(node, title, x_indx=0, x_input=None, x_min=-2.0, x_max=2.0, x_num=51):
+
+def vizAndTestProblem(
+    node, title, x_indx=0, x_input=None, x_min=-2.0, x_max=2.0, x_num=51
+):
     """
     Utility function for checking and visualizing operation of a declarative node.
 
@@ -35,7 +36,9 @@ def vizAndTestProblem(node, title, x_indx=0, x_input=None, x_min=-2.0, x_max=2.0
     :return: None
     """
 
-    x, y, Dy_analytic, Dy_implicit = computeValueAndGradients(node, x_indx, x_input, x_min, x_max, x_num)
+    x, y, Dy_analytic, Dy_implicit = computeValueAndGradients(
+        node, x_indx, x_input, x_min, x_max, x_num
+    )
 
     # compare implicit and true gradients
     print("-" * 80)
@@ -45,10 +48,10 @@ def vizAndTestProblem(node, title, x_indx=0, x_input=None, x_min=-2.0, x_max=2.0
     err = np.abs(np.array(Dy_implicit) - np.array(Dy_analytic))
     indx = ~np.isnan(err)
     if indx.any():
-        print("Max. Difference: {:0.3e}".format(np.max(err[indx])))
+        print(f"Max. Difference: {np.max(err[indx]):0.3e}")
     else:
         print("Max. Difference: NaN")
-    print("Number of NaNs: {}".format(np.sum(np.isnan(err))))
+    print(f"Number of NaNs: {np.sum(np.isnan(err))}")
 
     # plot function and gradients
     plt.figure()
@@ -57,7 +60,7 @@ def vizAndTestProblem(node, title, x_indx=0, x_input=None, x_min=-2.0, x_max=2.0
         plt.plot(x, [yi[i] for yi in y])
     plt.ylabel(r"$y$")
     plt.title(title)
-    plt.legend([r"$y_{}$".format(i + 1) for i in range(node.dim_y)])
+    plt.legend([rf"$y_{i + 1}$" for i in range(node.dim_y)])
 
     plt.subplot(3, 1, 2)
     for i in range(node.dim_y):
@@ -77,22 +80,76 @@ def vizAndTestProblem(node, title, x_indx=0, x_input=None, x_min=-2.0, x_max=2.0
     if node.dim_x == 1:
         plt.xlabel(r"$x$")
     else:
-        plt.xlabel(r"$x_{}$ (with $x$ = {})".format(x_indx + 1, [x_input[i] if i != x_indx else '?' for i in range(node.dim_x)]))
+        plt.xlabel(
+            r"$x_{}$ (with $x$ = {})".format(
+                x_indx + 1,
+                [x_input[i] if i != x_indx else "?" for i in range(node.dim_x)],
+            )
+        )
 
 
 # --- main -----------------------------------------------------------------------------------------------------------
 # test a few problems
 
-if __name__ == '__main__':
-    vizAndTestProblem(UnconstPolynomial(), r"minimize $xy^4 + 2x^2y^3 - 12y^2$", x_min=0.5, x_max=2.5)
-    vizAndTestProblem(LinFcnOnUnitCircle(), r"minimize $(1, x)^Ty$ subject to $\|y\|^2 = 1$")
-    vizAndTestProblem(ConstLinFcnOnParameterizedCircle(), r"minimize $1^Ty$ subject to $\|y\|^2 = x^2$")
-    vizAndTestProblem(LinFcnOnParameterizedCircle(), r"minimize $(1, x_1)^Ty$ subject to $\|y\|^2 = x_2^2$", x_indx=0, x_input=np.ones((2,)))
-    vizAndTestProblem(LinFcnOnParameterizedCircle(), r"minimize $(1, x_1)^Ty$ subject to $\|y\|^2 = x_2^2$", x_indx=1, x_input=np.ones((2,)))
-    vizAndTestProblem(QuadFcnOnSphere(), r"minimize $1/2 y^Ty - x^Ty$ subject to $\|y\|^2 = 1$", x_indx=0, x_input=0.5 * np.ones((2,)))
-    vizAndTestProblem(QuadFcnOnBall(), r"minimize $1/2 y^Ty - x^Ty$ subject to $\|y\|^2 \leq 1$", x_indx=0, x_input=0.5 * np.ones((2,)))
-    vizAndTestProblem(CosineDistance(), r"minimize $x^T y / \|y\|$", x_indx=0, x_input=np.ones((2,)), x_min=0.5, x_max=2.5)
-    vizAndTestProblem(RobustAverage(5), r"minimize $\sum_i \phi^{huber}(y - x_i; 1)$", x_indx=0, x_input=np.random.rand(5))
-    vizAndTestProblem(RobustAverage(5, alpha=0.5), r"minimize $\sum_i \phi^{huber}(y - x_i; 0.5)$", x_indx=0, x_input=np.random.rand(5))
-    vizAndTestProblem(RobustAverage(5, 'pseudo-huber'), r"minimize $\sum_i \phi^{pseudo\_huber}(y - x_i; 1)$", x_indx=0, x_input=np.random.rand(5))
+if __name__ == "__main__":
+    vizAndTestProblem(
+        UnconstPolynomial(), r"minimize $xy^4 + 2x^2y^3 - 12y^2$", x_min=0.5, x_max=2.5
+    )
+    vizAndTestProblem(
+        LinFcnOnUnitCircle(), r"minimize $(1, x)^Ty$ subject to $\|y\|^2 = 1$"
+    )
+    vizAndTestProblem(
+        ConstLinFcnOnParameterizedCircle(),
+        r"minimize $1^Ty$ subject to $\|y\|^2 = x^2$",
+    )
+    vizAndTestProblem(
+        LinFcnOnParameterizedCircle(),
+        r"minimize $(1, x_1)^Ty$ subject to $\|y\|^2 = x_2^2$",
+        x_indx=0,
+        x_input=np.ones((2,)),
+    )
+    vizAndTestProblem(
+        LinFcnOnParameterizedCircle(),
+        r"minimize $(1, x_1)^Ty$ subject to $\|y\|^2 = x_2^2$",
+        x_indx=1,
+        x_input=np.ones((2,)),
+    )
+    vizAndTestProblem(
+        QuadFcnOnSphere(),
+        r"minimize $1/2 y^Ty - x^Ty$ subject to $\|y\|^2 = 1$",
+        x_indx=0,
+        x_input=0.5 * np.ones((2,)),
+    )
+    vizAndTestProblem(
+        QuadFcnOnBall(),
+        r"minimize $1/2 y^Ty - x^Ty$ subject to $\|y\|^2 \leq 1$",
+        x_indx=0,
+        x_input=0.5 * np.ones((2,)),
+    )
+    vizAndTestProblem(
+        CosineDistance(),
+        r"minimize $x^T y / \|y\|$",
+        x_indx=0,
+        x_input=np.ones((2,)),
+        x_min=0.5,
+        x_max=2.5,
+    )
+    vizAndTestProblem(
+        RobustAverage(5),
+        r"minimize $\sum_i \phi^{huber}(y - x_i; 1)$",
+        x_indx=0,
+        x_input=np.random.rand(5),
+    )
+    vizAndTestProblem(
+        RobustAverage(5, alpha=0.5),
+        r"minimize $\sum_i \phi^{huber}(y - x_i; 0.5)$",
+        x_indx=0,
+        x_input=np.random.rand(5),
+    )
+    vizAndTestProblem(
+        RobustAverage(5, "pseudo-huber"),
+        r"minimize $\sum_i \phi^{pseudo\_huber}(y - x_i; 1)$",
+        x_indx=0,
+        x_input=np.random.rand(5),
+    )
     plt.show()

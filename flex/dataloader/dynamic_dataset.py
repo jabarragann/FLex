@@ -1,19 +1,20 @@
+import copy
 import json
 import os
 import sys
 
+import cv2
 import numpy as np
+import tifffile as tiff
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 from tqdm import tqdm
-import tifffile as tiff
-import copy
-import cv2
+
+from flex.render.util.util import decode_flow, resize_flow
 
 from .ray_utils import get_ray_directions_blender, get_rays, read_pfm
-from flex.render.util.util import decode_flow, resize_flow
 
 blender2opencv = torch.Tensor([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
 
@@ -78,15 +79,15 @@ class DynDataset(Dataset):
         self.root_dir = datadir
         self.split = split
         self.downsample = 1.0
-        #self.img_wh = (int(800 / downsample), int(800 / downsample))
+        # self.img_wh = (int(800 / downsample), int(800 / downsample))
         self.is_stack = is_stack
         self.N_vis = N_vis  # evaluate images for every N_vis images
 
         self.time_scale = time_scale
         self.world_bound_scale = 1.1
 
-        self.near = cfg.data.near #0.01#2.0 # adjust
-        self.far = cfg.data.far #1.0#6.0 # adjust
+        self.near = cfg.data.near  # 0.01#2.0 # adjust
+        self.far = cfg.data.far  # 1.0#6.0 # adjust
         self.near_far = [self.near, self.far]
         self.cfg = cfg
 
@@ -144,9 +145,17 @@ class DynDataset(Dataset):
         print("compute_bbox_by_cam_frustrm: start")
         xyz_min = torch.Tensor([np.inf, np.inf, np.inf])
         xyz_max = -xyz_min
-        if self.split=='test' or self.cfg.data.datasampler_type=="hierach" or self.is_stack:
-            rays_o = self.all_rays.reshape(self.all_rays.shape[0]*self.all_rays.shape[1],self.all_rays.shape[2])[:,0:3]
-            viewdirs = self.all_rays.reshape(self.all_rays.shape[0]*self.all_rays.shape[1],self.all_rays.shape[2])[:,3:6]
+        if (
+            self.split == "test"
+            or self.cfg.data.datasampler_type == "hierach"
+            or self.is_stack
+        ):
+            rays_o = self.all_rays.reshape(
+                self.all_rays.shape[0] * self.all_rays.shape[1], self.all_rays.shape[2]
+            )[:, 0:3]
+            viewdirs = self.all_rays.reshape(
+                self.all_rays.shape[0] * self.all_rays.shape[1], self.all_rays.shape[2]
+            )[:, 3:6]
         else:
             rays_o = self.all_rays[:, 0:3]
             viewdirs = self.all_rays[:, 3:6]
@@ -171,27 +180,32 @@ class DynDataset(Dataset):
         with open(os.path.join(self.root_dir, f"transforms_{self.split}.json")) as f:
             self.meta = json.load(f)
 
-        '''
+        """
         self.focal = (
             0.5 * 800 / np.tan(0.5 * self.meta["camera_angle_x"])
         )  # original focal length
         self.focal *= (
             self.img_wh[0] / 800
         )  # modify focal length to match size self.img_wh
-        '''
+        """
         if self.cfg.model.localrf:
-            lower_idx = max(round(len(self.meta['frames'])*((0.03)*self.cfg.model.model_num-0.015)),0)
-            upper_idx = lower_idx + round(len(self.meta['frames'])*(0.03))
-            self.meta['frames'] = self.meta['frames'][lower_idx:upper_idx]
-            
-        
-        w, h = self.meta['w'], self.meta['h']
+            lower_idx = max(
+                round(
+                    len(self.meta["frames"])
+                    * ((0.03) * self.cfg.model.model_num - 0.015)
+                ),
+                0,
+            )
+            upper_idx = lower_idx + round(len(self.meta["frames"]) * (0.03))
+            self.meta["frames"] = self.meta["frames"][lower_idx:upper_idx]
+
+        w, h = self.meta["w"], self.meta["h"]
         # fix img_wh dim:
         self.img_wh = (int(w), int(h))
-        self.cx = self.meta['cx']/self.downsample
-        self.cy = self.meta['cy']/self.downsample
-        self.focal = self.meta['fl_x']/self.downsample
-        '''
+        self.cx = self.meta["cx"] / self.downsample
+        self.cy = self.meta["cy"] / self.downsample
+        self.focal = self.meta["fl_x"] / self.downsample
+        """
         print(self.cx)
         print(self.meta['cx'])
         print(self.cy)
@@ -199,23 +213,28 @@ class DynDataset(Dataset):
         print(w)
         print(h)
         sys.exit()
-        '''
+        """
         # ray directions for all pixels, same for all images (same H, W, focal)
         self.directions = get_ray_directions_blender(
-            h, w, [self.focal, self.focal]#, [self.cx, self.cy] # test cx and cy instead of standard center TODO: remove if experiment failed
+            h,
+            w,
+            [
+                self.focal,
+                self.focal,
+            ],  # , [self.cx, self.cy] # test cx and cy instead of standard center TODO: remove if experiment failed
         )  # (h, w, 3)
         self.directions = self.directions / torch.norm(
             self.directions, dim=-1, keepdim=True
         )
-        
+
         self.intrinsics = torch.tensor(
             [[self.focal, 0, w / 2], [0, self.focal, h / 2], [0, 0, 1]]
         ).float()
-        '''
+        """
         self.intrinsics = torch.tensor(
             [[self.focal, 0, self.cx], [0, self.focal, self.cy], [0, 0, 1]]
         )
-        '''
+        """
         self.image_paths = []
         self.depth_paths = []
         self.poses = []
@@ -246,103 +265,121 @@ class DynDataset(Dataset):
             image_path = os.path.join(self.root_dir, f"{frame['file_path']}.png")
             self.image_paths += [image_path]
             img = Image.open(image_path)
-            '''
+            """
             if self.downsample != 1.0:
                 img = img.resize(self.img_wh, Image.LANCZOS)
-            '''
+            """
             img = self.transform(img)  # (3, h, w)
             img = img.view(3, -1).permute(1, 0)  # (h*w, 3) RGB
-            '''
+            """
             img = img[:, :3] * img[:, -1:] + (
                 1 - img[:, -1:]
             )  # blend A to RGB, white background
-            '''
+            """
             self.all_rgbs += [img]
 
             # handling of depth files:
             if self.depth_data:
-                depth_file_path = frame['depth_file_path']
-                #self.depth_paths += [depth_file_path]
+                depth_file_path = frame["depth_file_path"]
+                # self.depth_paths += [depth_file_path]
                 depth = torch.tensor(tiff.imread(depth_file_path))
-                #depth = torch.tensor(raw_depth)
-                #del raw_depth
+                # depth = torch.tensor(raw_depth)
+                # del raw_depth
                 depth = depth.view(1, -1).permute(1, 0)  # (h*w, 1) Gray-scale
                 self.all_depths += [depth]
-                #print(depth.shape)
-                #print(depth_file_path)
-                #print(img.shape)
-                #print(image_path)
+                # print(depth.shape)
+                # print(depth_file_path)
+                # print(img.shape)
+                # print(image_path)
 
             if self.bpixel_mask_data:
-                bpixel_mask_path = os.path.join(os.path.split(self.root_dir)[0], "black_pixel_mask/mask.png")
+                bpixel_mask_path = os.path.join(
+                    os.path.split(self.root_dir)[0], "black_pixel_mask/mask.png"
+                )
                 self.bpixel_mask = self.transform(Image.open(bpixel_mask_path))
                 # set mask to binary by filtering out all pixels below 255
-                self.bpixel_mask = self.bpixel_mask >= 255/255
-                self.bpixel_mask = self.bpixel_mask.view(1, -1).permute(1, 0)  # (h*w, 1)
-                self.bpixel_mask = self.bpixel_mask.repeat(len(self.image_paths),1) # (num.images*h*w,1)
+                self.bpixel_mask = self.bpixel_mask >= 255 / 255
+                self.bpixel_mask = self.bpixel_mask.view(1, -1).permute(
+                    1, 0
+                )  # (h*w, 1)
+                self.bpixel_mask = self.bpixel_mask.repeat(
+                    len(self.image_paths), 1
+                )  # (num.images*h*w,1)
 
             if self.pixel_feat_data:
                 # pixel features
-                pixel_feat_path = frame['pixel_desc_path']
-                pixel_feat = np.load(pixel_feat_path)['arr_0'][:self.cfg.model.pixel_feat_dim, :]
+                pixel_feat_path = frame["pixel_desc_path"]
+                pixel_feat = np.load(pixel_feat_path)["arr_0"][
+                    : self.cfg.model.pixel_feat_dim, :
+                ]
                 pixel_feat_tensor = torch.tensor(pixel_feat)
-                del pixel_feat # save memory
-                pixel_feat_tensor = pixel_feat_tensor.view(self.cfg.model.pixel_feat_dim, -1).permute(1, 0)  # (h*w, self.cfg.pixel_feat_dim)
+                del pixel_feat  # save memory
+                pixel_feat_tensor = pixel_feat_tensor.view(
+                    self.cfg.model.pixel_feat_dim, -1
+                ).permute(
+                    1, 0
+                )  # (h*w, self.cfg.pixel_feat_dim)
                 self.all_pixel_feat += [pixel_feat_tensor]
 
                 # pixel feature mask
-                pixel_feat_mask_path = os.path.join(os.path.split(self.root_dir)[0], "descriptor-silk-mask.npz")
-                pixel_feat_mask_np = np.load(pixel_feat_mask_path)['arr_0']
+                pixel_feat_mask_path = os.path.join(
+                    os.path.split(self.root_dir)[0], "descriptor-silk-mask.npz"
+                )
+                pixel_feat_mask_np = np.load(pixel_feat_mask_path)["arr_0"]
                 self.pixel_feat_mask = torch.tensor(pixel_feat_mask_np)
-                del pixel_feat_mask_np # save memory
-                self.pixel_feat_mask = self.pixel_feat_mask.view(1, -1).permute(1, 0)  # (h*w, 1)
-                self.pixel_feat_mask = self.pixel_feat_mask.repeat(len(self.image_paths), 1)  # (num.images*h*w,1)
+                del pixel_feat_mask_np  # save memory
+                self.pixel_feat_mask = self.pixel_feat_mask.view(1, -1).permute(
+                    1, 0
+                )  # (h*w, 1)
+                self.pixel_feat_mask = self.pixel_feat_mask.repeat(
+                    len(self.image_paths), 1
+                )  # (num.images*h*w,1)
 
             if self.load_flow:
                 # optical flow forwards and backwards
                 if "fwd_file_path" not in frame:
-                    fwd_file_path = 'data/test_data/empty.png'
+                    fwd_file_path = "data/test_data/empty.png"
                     fwd_flow = cv2.imread(fwd_file_path, cv2.IMREAD_UNCHANGED)
                     fwd_flow = fwd_flow.reshape(h, w, 1)
                     fwd_mask = fwd_flow
                     fwd_flow = fwd_flow.repeat(2, axis=-1)
                 else:
-                    fwd_file_path = frame['fwd_file_path']
+                    fwd_file_path = frame["fwd_file_path"]
                     fwd_data = np.load(fwd_file_path)
-                    fwd_flow, fwd_mask = fwd_data['flow'], fwd_data['mask']
+                    fwd_flow, fwd_mask = fwd_data["flow"], fwd_data["mask"]
                 if "bwd_file_path" not in frame:
-                    bwd_file_path = 'data/test_data/empty.png'
+                    bwd_file_path = "data/test_data/empty.png"
                     bwd_flow = cv2.imread(bwd_file_path, cv2.IMREAD_UNCHANGED)
                     bwd_flow = bwd_flow.reshape(h, w, 1)
                     bwd_mask = bwd_flow
                     bwd_flow = bwd_flow.repeat(2, axis=-1)
                 else:
-                    bwd_file_path = frame['bwd_file_path']
+                    bwd_file_path = frame["bwd_file_path"]
                     bwd_data = np.load(bwd_file_path)
-                    bwd_flow, bwd_mask = bwd_data['flow'], bwd_data['mask']
+                    bwd_flow, bwd_mask = bwd_data["flow"], bwd_data["mask"]
 
-                
                 fwd_flow = resize_flow(fwd_flow, w, h)
                 fwd_mask = np.float32(fwd_mask)
-                fwd_mask = cv2.resize(fwd_mask, (w, h),
-                                interpolation=cv2.INTER_NEAREST)
+                fwd_mask = cv2.resize(fwd_mask, (w, h), interpolation=cv2.INTER_NEAREST)
 
                 bwd_flow = resize_flow(bwd_flow, w, h)
                 bwd_mask = np.float32(bwd_mask)
-                bwd_mask = cv2.resize(bwd_mask, (w, h),
-                                interpolation=cv2.INTER_NEAREST)
-                
-                        
+                bwd_mask = cv2.resize(bwd_mask, (w, h), interpolation=cv2.INTER_NEAREST)
+
                 fwd_flow = self.transform(fwd_flow).view(2, -1).permute(1, 0)
                 bwd_flow = self.transform(bwd_flow).view(2, -1).permute(1, 0)
-                fwd_mask = self.transform(fwd_mask).view(1, -1).permute(1, 0)#.reshape(-1, 1)
-                bwd_mask = self.transform(bwd_mask).view(1, -1).permute(1, 0)#.reshape(-1, 1)
-                fwd_mask2 = torch.full_like(fwd_mask, frame['fwd_mask'])
-                bwd_mask2 = torch.full_like(bwd_mask, frame['bwd_mask'])
+                fwd_mask = (
+                    self.transform(fwd_mask).view(1, -1).permute(1, 0)
+                )  # .reshape(-1, 1)
+                bwd_mask = (
+                    self.transform(bwd_mask).view(1, -1).permute(1, 0)
+                )  # .reshape(-1, 1)
+                fwd_mask2 = torch.full_like(fwd_mask, frame["fwd_mask"])
+                bwd_mask2 = torch.full_like(bwd_mask, frame["bwd_mask"])
                 fwd_mask = torch.logical_and(fwd_mask, fwd_mask2)
                 bwd_mask = torch.logical_and(bwd_mask, bwd_mask2)
-                self.prev_test.append(torch.tensor([frame['prev_test']]))
-                self.post_test.append(torch.tensor([frame['post_test']]))
+                self.prev_test.append(torch.tensor([frame["prev_test"]]))
+                self.post_test.append(torch.tensor([frame["post_test"]]))
 
             else:
                 fwd_flow, fwd_mask, bwd_flow, bwd_mask = None, None, None, None
@@ -351,7 +388,6 @@ class DynDataset(Dataset):
             self.all_bwd.append(bwd_flow)
             self.all_fwd_mask.append(fwd_mask)
             self.all_bwd_mask.append(bwd_mask)
-
 
             rays_o, rays_d = get_rays(self.directions, c2w)  # Get rays, both (h*w, 3).
             self.all_rays += [torch.cat([rays_o, rays_d], 1)]  # (h*w, 6)
@@ -363,7 +399,7 @@ class DynDataset(Dataset):
             self.all_times += [cur_time]
 
         self.poses = torch.stack(self.poses)
-        if self.split=='train' and self.load_flow:
+        if self.split == "train" and self.load_flow:
             self.prev_test = torch.stack(self.prev_test)
             self.post_test = torch.stack(self.post_test)
         #  self.is_stack stacks all images into a big chunk, with shape (N, H, W, 3).
@@ -377,9 +413,7 @@ class DynDataset(Dataset):
             )  # (len(self.meta['frames])*h*w, 3)
             self.all_times = torch.cat(self.all_times, 0)
             if self.depth_data:
-                self.all_depths = torch.cat(
-                    self.all_depths, 0
-                )
+                self.all_depths = torch.cat(self.all_depths, 0)
             if self.pixel_feat_data:
                 self.all_pixel_feat = torch.cat(
                     self.all_pixel_feat, 0
@@ -408,12 +442,10 @@ class DynDataset(Dataset):
             self.all_times = torch.stack(self.all_times, 0)
             if self.depth_data:
                 self.all_depths = torch.stack(self.all_depths, 0).reshape(
-                -1, *self.img_wh[::-1], 1
-            )  # (len(self.meta['frames]),h,w,1)
-            if self.bpixel_mask_data:
-                self.bpixel_mask = self.bpixel_mask.reshape(
                     -1, *self.img_wh[::-1], 1
-                )
+                )  # (len(self.meta['frames]),h,w,1)
+            if self.bpixel_mask_data:
+                self.bpixel_mask = self.bpixel_mask.reshape(-1, *self.img_wh[::-1], 1)
             if self.pixel_feat_data:
                 self.all_pixel_feat = torch.stack(self.all_pixel_feat, 0).reshape(
                     -1, *self.img_wh[::-1], self.cfg.model.pixel_feat_dim
@@ -435,13 +467,10 @@ class DynDataset(Dataset):
                     -1, *self.img_wh[::-1], 1
                 )  # (len(self.meta['frames]),h,w,1)
 
-        all_imgs = copy.deepcopy(self.all_rgbs.reshape(
-                -1, *self.img_wh[::-1], 3
-            ))
+        all_imgs = copy.deepcopy(self.all_rgbs.reshape(-1, *self.img_wh[::-1], 3))
 
         self.all_times = self.time_scale * (self.all_times * 2.0 - 1.0)
         self.global_mean_rgb = torch.mean(all_imgs, dim=0)
-        
 
     def define_transforms(self):
         self.transform = T.ToTensor()
@@ -498,17 +527,17 @@ class DynDataset(Dataset):
             sample = {"rays": rays, "rgbs": img, "time": time}
 
         if self.depth_data:
-            sample['depths'] = self.all_depths[idx]
+            sample["depths"] = self.all_depths[idx]
         if self.bpixel_mask_data:
-            sample['bpixel_mask'] = self.bpixel_mask[idx]
+            sample["bpixel_mask"] = self.bpixel_mask[idx]
         if self.pixel_feat_data:
-            sample['pixel_feat'] = self.all_pixel_feat[idx]
-            sample['pixel_feat_mask'] = self.pixel_feat_mask[idx]
+            sample["pixel_feat"] = self.all_pixel_feat[idx]
+            sample["pixel_feat_mask"] = self.pixel_feat_mask[idx]
         if self.load_flow:
-            sample['fwd'] = self.all_fwd[idx]
-            sample['bwd'] = self.all_bwd[idx]
-            sample['fwd_mask'] = self.all_fwd_mask[idx]
-            sample['bwd_mask'] = self.all_bwd_mask[idx]
+            sample["fwd"] = self.all_fwd[idx]
+            sample["bwd"] = self.all_bwd[idx]
+            sample["fwd_mask"] = self.all_fwd_mask[idx]
+            sample["bwd_mask"] = self.all_bwd_mask[idx]
 
         return sample
 
@@ -549,22 +578,35 @@ class DynDataset(Dataset):
 
         return out, self.random_times[idx_img]
 
-
-
     def get_new_pose_rays(self, pose, times, time):
-
         xs = list(np.zeros(times))
         ys = list(np.zeros(times))
         zs = list(np.zeros(times))
 
         rot_deg = 0.5
-        rxs = list(np.zeros(2)) + list(np.ones(2) * -rot_deg) + list(np.zeros(2)) + list(np.ones(2)*1.5*rot_deg) + list(np.zeros(2)) + list(np.ones(2)*-2*rot_deg) + list(np.ones(2)*1.5*rot_deg)
-        rys = list(np.ones(2) * rot_deg) + list(np.zeros(2)) + list(np.ones(2) * -1.5*rot_deg) + list(np.zeros(2)) + list(np.ones(2)*2*rot_deg) + list(np.zeros(2)) + list(np.ones(2)*-1.5*rot_deg)
+        rxs = (
+            list(np.zeros(2))
+            + list(np.ones(2) * -rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * 1.5 * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * -2 * rot_deg)
+            + list(np.ones(2) * 1.5 * rot_deg)
+        )
+        rys = (
+            list(np.ones(2) * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * -1.5 * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * 2 * rot_deg)
+            + list(np.zeros(2))
+            + list(np.ones(2) * -1.5 * rot_deg)
+        )
         rzs = list(np.zeros(times))
 
-        if times==0: # useful for simulating fixed pose for all timesteps
+        if times == 0:  # useful for simulating fixed pose for all timesteps
             rays_all = []  # initialize list to store [rays_o, rays_d]
-            poses = pose.reshape(1,pose.shape[0], pose.shape[1])
+            poses = pose.reshape(1, pose.shape[0], pose.shape[1])
             time_a = time
             for i in range(1):
                 c2w = torch.FloatTensor(poses[i])
@@ -575,27 +617,33 @@ class DynDataset(Dataset):
         for i in range(times):
             # x, y, z, rx, ry, rz = ...
             x, y, z, rx, ry, rz = xs[i], 0, zs[i], rxs[i], rys[i], rzs[i]
-            c2w = np.array([[1, 0, 0, x],
-                            [0, 1, 0, y],
-                            [0, 0, 1, z],
-                            [0, 0, 0, 1]])
-            R_X = np.array([
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, np.cos(rx * 3.1415 / 180), -np.sin(rx * 3.1415 / 180), 0.0],
-                [0.0, np.sin(rx * 3.1415 / 180), np.cos(rx * 3.1415 / 180), 0.0],
-                [0.0, 0.0, 0.0, 1.0]])
+            c2w = np.array([[1, 0, 0, x], [0, 1, 0, y], [0, 0, 1, z], [0, 0, 0, 1]])
+            R_X = np.array(
+                [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, np.cos(rx * 3.1415 / 180), -np.sin(rx * 3.1415 / 180), 0.0],
+                    [0.0, np.sin(rx * 3.1415 / 180), np.cos(rx * 3.1415 / 180), 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
 
-            R_Y = np.array([
-                [np.cos(ry * 3.1415 / 180), 0.0, np.sin(ry * 3.1415 / 180), 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [-np.sin(ry * 3.1415 / 180), 0.0, np.cos(ry * 3.1415 / 180), 0.0],
-                [0.0, 0.0, 0.0, 1.0]])
+            R_Y = np.array(
+                [
+                    [np.cos(ry * 3.1415 / 180), 0.0, np.sin(ry * 3.1415 / 180), 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [-np.sin(ry * 3.1415 / 180), 0.0, np.cos(ry * 3.1415 / 180), 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
 
-            R_Z = np.array([
-                [np.cos(rz * 3.1415 / 180), -np.sin(rz * 3.1415 / 180), 0.0, 0.0],
-                [np.sin(rz * 3.1415 / 180), np.cos(rz * 3.1415 / 180), 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0]])
+            R_Z = np.array(
+                [
+                    [np.cos(rz * 3.1415 / 180), -np.sin(rz * 3.1415 / 180), 0.0, 0.0],
+                    [np.sin(rz * 3.1415 / 180), np.cos(rz * 3.1415 / 180), 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
 
             if i == 0:
                 pose = pose.detach().cpu().numpy()
@@ -604,10 +652,14 @@ class DynDataset(Dataset):
 
             new_time = time + (i + 1) * 0.00001
 
-            new_pose = new_pose.reshape(1, new_pose.shape[0], new_pose.shape[1])#[:, :3]
+            new_pose = new_pose.reshape(
+                1, new_pose.shape[0], new_pose.shape[1]
+            )  # [:, :3]
 
             if i == 0:
-                poses = np.concatenate((pose.reshape(1, pose.shape[0], pose.shape[1]), new_pose))
+                poses = np.concatenate(
+                    (pose.reshape(1, pose.shape[0], pose.shape[1]), new_pose)
+                )
                 time_a = np.concatenate((time, new_time))
                 time = new_time
                 pose = new_pose[0]

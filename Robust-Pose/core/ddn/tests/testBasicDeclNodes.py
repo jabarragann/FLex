@@ -8,15 +8,18 @@
 #   $ python testBasicDeclNodes.py
 #
 
-from ddn.basic.node import *
-from ddn.basic.composition import *
-from ddn.basic.sample_nodes import *
-from ddn.basic.robust_nodes import *
-
-import numpy as np
 import unittest
 
-def computeValueAndGradients(node, x_indx=0, x_input=None, x_min=-2.0, x_max=2.0, x_num=51):
+import numpy as np
+from ddn.basic.composition import *
+from ddn.basic.node import *
+from ddn.basic.robust_nodes import *
+from ddn.basic.sample_nodes import *
+
+
+def computeValueAndGradients(
+    node, x_indx=0, x_input=None, x_min=-2.0, x_max=2.0, x_num=51
+):
     """
     Utility function for computing value and gradients for a declarative node.
 
@@ -48,9 +51,10 @@ def computeValueAndGradients(node, x_indx=0, x_input=None, x_min=-2.0, x_max=2.0
 
 
 class TestBasicDeclNodes(unittest.TestCase):
-
     def testUnconstPolynomial(self):
-        x, y, Da, Di = computeValueAndGradients(UnconstPolynomial(), x_min=0.5, x_max=2.5)
+        x, y, Da, Di = computeValueAndGradients(
+            UnconstPolynomial(), x_min=0.5, x_max=2.5
+        )
         self.assertLess(np.max(np.abs(np.array(Da) - np.array(Di))), 1.0e-12)
 
     def testLinFcnOnUnitCircle(self):
@@ -62,29 +66,45 @@ class TestBasicDeclNodes(unittest.TestCase):
         self.assertLess(np.nanmax(np.abs(np.array(Da) - np.array(Di))), 1.0e-12)
 
     def testLinFcnOnParameterizedCircle(self):
-        x, y, Da, Di = computeValueAndGradients(LinFcnOnParameterizedCircle(), x_indx=0, x_input=np.ones((2,)))
+        x, y, Da, Di = computeValueAndGradients(
+            LinFcnOnParameterizedCircle(), x_indx=0, x_input=np.ones((2,))
+        )
         self.assertLess(np.nanmax(np.abs(np.array(Da) - np.array(Di))), 1.0e-12)
-        x, y, Da, Di = computeValueAndGradients(LinFcnOnParameterizedCircle(), x_indx=1, x_input=np.ones((2,)))
+        x, y, Da, Di = computeValueAndGradients(
+            LinFcnOnParameterizedCircle(), x_indx=1, x_input=np.ones((2,))
+        )
         self.assertLess(np.nanmax(np.abs(np.array(Da) - np.array(Di))), 1.0e-12)
 
     def testQuadFcnOnSphere(self):
-        x, y, Da, Di = computeValueAndGradients(QuadFcnOnSphere(), x_indx=0, x_input=0.5 * np.ones((2,)))
+        x, y, Da, Di = computeValueAndGradients(
+            QuadFcnOnSphere(), x_indx=0, x_input=0.5 * np.ones((2,))
+        )
         self.assertLess(np.max(np.abs(np.array(Da) - np.array(Di))), 1.0e-12)
 
     def testQuadFcnOnBall(self):
-        x, y, Da, Di = computeValueAndGradients(QuadFcnOnBall(), x_indx=0, x_input=0.5 * np.ones((2,)))
+        x, y, Da, Di = computeValueAndGradients(
+            QuadFcnOnBall(), x_indx=0, x_input=0.5 * np.ones((2,))
+        )
         self.assertLess(np.max(np.abs(np.array(Da) - np.array(Di))), 1.0e-12)
 
     def testCosineDistance(self):
-        x, y, Da, Di = computeValueAndGradients(CosineDistance(), x_indx=0, x_input=np.ones((2,)), x_min=0.5, x_max=2.5)
+        x, y, Da, Di = computeValueAndGradients(
+            CosineDistance(), x_indx=0, x_input=np.ones((2,)), x_min=0.5, x_max=2.5
+        )
         self.assertLess(np.max(np.abs(np.array(Da) - np.array(Di))), 1.0e-12)
 
     def testRobustAverage(self):
-        x, y, Da, Di = computeValueAndGradients(RobustAverage(5), x_indx=0, x_input=np.random.rand(5))
+        x, y, Da, Di = computeValueAndGradients(
+            RobustAverage(5), x_indx=0, x_input=np.random.rand(5)
+        )
         self.assertLess(np.max(np.abs(np.array(Da) - np.array(Di))), 1.0e-12)
-        x, y, Da, Di = computeValueAndGradients(RobustAverage(5, alpha=0.5), x_indx=0, x_input=np.random.rand(5))
+        x, y, Da, Di = computeValueAndGradients(
+            RobustAverage(5, alpha=0.5), x_indx=0, x_input=np.random.rand(5)
+        )
         self.assertLess(np.max(np.abs(np.array(Da) - np.array(Di))), 1.0e-12)
-        x, y, Da, Di = computeValueAndGradients(RobustAverage(5, 'pseudo-huber'), x_indx=0, x_input=np.random.rand(5))
+        x, y, Da, Di = computeValueAndGradients(
+            RobustAverage(5, "pseudo-huber"), x_indx=0, x_input=np.random.rand(5)
+        )
         self.assertLess(np.max(np.abs(np.array(Da) - np.array(Di))), 1.0e-12)
 
     def testComposedNode(self):
@@ -104,5 +124,5 @@ class TestBasicDeclNodes(unittest.TestCase):
         np.testing.assert_array_almost_equal(x[5:8], y)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

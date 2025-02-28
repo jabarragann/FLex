@@ -7,46 +7,64 @@
 #   $ export PYTHONPATH=${PYTHONPATH}: ../ddn
 #   $ python testPyTorchDeclNodes.py
 
-import torch
-from torch.autograd import grad
-from torch.autograd import gradcheck
-import numpy as np
-
 import sys
+
+import numpy as np
+import torch
+from torch.autograd import grad, gradcheck
+
 sys.path.append("../")
 from ddn.pytorch.node import *
 from ddn.pytorch.sample_nodes import *
 
+
 def test_node(node, xs):
-	y, ctx = torch.no_grad()(node.solve)(*xs)
-	y.requires_grad = True
-	fxy = node.objective(*xs, y=y)
+    y, ctx = torch.no_grad()(node.solve)(*xs)
+    y.requires_grad = True
+    fxy = node.objective(*xs, y=y)
 
-	# print("Input:\n{}".format(xs[0].detach()))
-	# print("Output:\n{}".format(y.detach()))
-	# print("Fn Value:\n{}".format(fxy.detach()))
+    # print("Input:\n{}".format(xs[0].detach()))
+    # print("Output:\n{}".format(y.detach()))
+    # print("Fn Value:\n{}".format(fxy.detach()))
 
-	Dys = super(type(node), node).gradient(*xs, y=None, v=None, ctx=None) # call parent gradient method
-	Dys_analytic = node.gradient(*xs, y=None, v=None, ctx=None)
-	# print("Dy:\n{}".format(Dys[0].detach()))
-	# print("Dy analytic:\n{}".format(Dys_analytic[0].detach()))
-	print("Autograd and analytic gradients agree?", torch.allclose(Dys[0], Dys_analytic[0], rtol=0.0, atol=1e-12))
+    Dys = super(type(node), node).gradient(
+        *xs, y=None, v=None, ctx=None
+    )  # call parent gradient method
+    Dys_analytic = node.gradient(*xs, y=None, v=None, ctx=None)
+    # print("Dy:\n{}".format(Dys[0].detach()))
+    # print("Dy analytic:\n{}".format(Dys_analytic[0].detach()))
+    print(
+        "Autograd and analytic gradients agree?",
+        torch.allclose(Dys[0], Dys_analytic[0], rtol=0.0, atol=1e-12),
+    )
 
-	node.gradient = super(type(node), node).gradient # Use generic gradient for gradcheck
-	DL = DeclarativeLayer(node)
-	y = DL(*xs)
-	Dy = grad(y, xs[0], grad_outputs=torch.ones_like(y))[0]
-	# print("Output:   {}".format(y.detach()))
-	# print("Dy:\n{}".format(Dy.detach()))
-	test = gradcheck(DL, xs, eps=1e-6, atol=1e-5, rtol=1e-5, raise_exception=False)
-	print("gradcheck passed:", test)
+    node.gradient = super(
+        type(node), node
+    ).gradient  # Use generic gradient for gradcheck
+    DL = DeclarativeLayer(node)
+    y = DL(*xs)
+    Dy = grad(y, xs[0], grad_outputs=torch.ones_like(y))[0]
+    # print("Output:   {}".format(y.detach()))
+    # print("Dy:\n{}".format(Dy.detach()))
+    test = gradcheck(DL, xs, eps=1e-6, atol=1e-5, rtol=1e-5, raise_exception=False)
+    print("gradcheck passed:", test)
 
-def scalar_to_batched_tensor(a, batch_size, dtype=None, device=None, requires_grad=False):
-	a = torch.tensor([a], dtype=dtype, device=device, requires_grad=requires_grad).unsqueeze(0).expand(batch_size, -1) # bx1
-	if requires_grad:
-		return a.clone() # If you want the gradient of a, the copies of a cannot share memory
-	else:
-		return a
+
+def scalar_to_batched_tensor(
+    a, batch_size, dtype=None, device=None, requires_grad=False
+):
+    a = (
+        torch.tensor([a], dtype=dtype, device=device, requires_grad=requires_grad)
+        .unsqueeze(0)
+        .expand(batch_size, -1)
+    )  # bx1
+    if requires_grad:
+        return (
+            a.clone()
+        )  # If you want the gradient of a, the copies of a cannot share memory
+    else:
+        return a
+
 
 # Polynomial
 print("\nPolynomial Example:\n")
@@ -103,6 +121,6 @@ print("\nQuadFcnOnBall:\n")
 node = QuadFcnOnBall()
 x = torch.randn(3, 4, dtype=torch.double, requires_grad=True)
 # Force at least one xi to be ||xi|| < 1.0
-x[1, :] = x[1, :] / torch.sqrt(torch.einsum('bm,bm->b', (x, x))[1]) / 1.1
+x[1, :] = x[1, :] / torch.sqrt(torch.einsum("bm,bm->b", (x, x))[1]) / 1.1
 xs = (x,)
 test_node(node, xs)

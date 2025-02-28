@@ -60,7 +60,7 @@ def get_ray_directions_blender(H, W, focal, center=None):
     """
     grid = create_meshgrid(H, W, normalized_coordinates=False)[0] + 0.5
     i, j = grid.unbind(-1)
-    
+
     # the direction here is without +0.5 pixel centering as calibration is not so accurate
     # see https://github.com/bmild/nerf/issues/24
     cent = center if center is not None else [W / 2, H / 2]
@@ -78,13 +78,14 @@ def get_ray_directions_lean(i, j, focal, center):
     Outputs:
         directions: (b, 3), the direction of the rays in camera coordinate
     """
-    #center = [240.0, 135.0]
+    # center = [240.0, 135.0]
     i, j = i.float() + 0.5, j.float() + 0.5
-    
+
     directions = torch.stack(
-        [(i - center[0]) / focal[0], -(j - center[1]) / focal[1], -torch.ones_like(i)], -1
+        [(i - center[0]) / focal[0], -(j - center[1]) / focal[1], -torch.ones_like(i)],
+        -1,
     )  # (b, 3)
-    
+
     return directions
 
 

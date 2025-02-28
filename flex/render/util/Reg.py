@@ -4,7 +4,7 @@ import torch.nn as nn
 
 class TVLoss(nn.Module):
     def __init__(self, TVLoss_weight_dim1=1.0, TVLoss_weight_dim2=1.0):
-        super(TVLoss, self).__init__()
+        super().__init__()
         self.TVLoss_weight_dim1 = TVLoss_weight_dim1
         self.TVLoss_weight_dim2 = TVLoss_weight_dim2
 

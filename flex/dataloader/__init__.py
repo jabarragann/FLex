@@ -1,9 +1,9 @@
 from .dnerf_dataset import DNerfDataset
-from .neural_3D_dataset_NDC import Neural3D_NDC_Dataset
-from .miti_dataset import MitiDataset
-from .scared_dataset import ScaredDataset
-from .endonerf_dataset import EndoNeRFDataset
 from .dynamic_dataset import DynDataset
+from .endonerf_dataset import EndoNeRFDataset
+from .miti_dataset import MitiDataset
+from .neural_3D_dataset_NDC import Neural3D_NDC_Dataset
+from .scared_dataset import ScaredDataset
 from .stereomis_dataset import StereoMISDataset
 
 
@@ -38,7 +38,7 @@ def get_train_dataset(cfg, is_stack=False):
             eval_index=cfg.data.nv3d_ndc_eval_index,
             sphere_scale=cfg.data.nv3d_ndc_sphere_scale,
         )
-    elif cfg.data.dataset_name == 'miti':
+    elif cfg.data.dataset_name == "miti":
         train_dataset = MitiDataset(
             cfg.data.datadir,
             split="train",
@@ -52,7 +52,7 @@ def get_train_dataset(cfg, is_stack=False):
             N_random_pose=cfg.data.N_random_pose,
             cfg=cfg,
         )
-    elif cfg.data.dataset_name == 'scared':
+    elif cfg.data.dataset_name == "scared":
         train_dataset = ScaredDataset(
             cfg.data.datadir,
             split="train",
@@ -66,7 +66,7 @@ def get_train_dataset(cfg, is_stack=False):
             N_random_pose=cfg.data.N_random_pose,
             cfg=cfg,
         )
-    elif cfg.data.dataset_name == 'endonerf':
+    elif cfg.data.dataset_name == "endonerf":
         train_dataset = EndoNeRFDataset(
             cfg.data.datadir,
             split="train",
@@ -80,7 +80,7 @@ def get_train_dataset(cfg, is_stack=False):
             N_random_pose=cfg.data.N_random_pose,
             cfg=cfg,
         )
-    elif cfg.data.dataset_name == 'dynamic':
+    elif cfg.data.dataset_name == "dynamic":
         train_dataset = DynDataset(
             cfg.data.datadir,
             split="train",
@@ -94,7 +94,7 @@ def get_train_dataset(cfg, is_stack=False):
             N_random_pose=cfg.data.N_random_pose,
             cfg=cfg,
         )
-    elif cfg.data.dataset_name == 'stereomis':
+    elif cfg.data.dataset_name == "stereomis":
         train_dataset = StereoMISDataset(
             cfg.data.datadir,
             split="train",

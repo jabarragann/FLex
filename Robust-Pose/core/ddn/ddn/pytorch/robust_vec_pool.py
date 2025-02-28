@@ -19,17 +19,20 @@
 # Yizhak Ben Shabat <Yizhak.BenShabat@anu.edu.au>
 #
 
+import warnings
+
 import torch
 import torch.nn as nn
-import warnings
 
 # --- Penalty functions -------------------------------------------------------
 
-class Penalty():
+
+class Penalty:
     """
     Prototype for a penalty function, phi, including methods necessary for optimizing and back-propagation.
     See `Quadratic` for an example.
     """
+
     is_convex = None
 
     @staticmethod
@@ -45,6 +48,7 @@ class Penalty():
 
 class Quadratic(Penalty):
     """Quadratic penality function. Don't use for anything other than testing."""
+
     is_convex = True
 
     @staticmethod
@@ -58,6 +62,7 @@ class Quadratic(Penalty):
 
 class PseudoHuber(Penalty):
     """Pseudo-Huber penalty."""
+
     is_convex = True
 
     @staticmethod
@@ -74,23 +79,31 @@ class PseudoHuber(Penalty):
 
 class Huber(Penalty):
     """Huber penalty."""
+
     is_convex = True
 
     @staticmethod
     def phi(z, alpha=1.0):
         alpha2 = alpha * alpha
-        return torch.where(torch.abs(z) <= alpha, 0.5 * torch.pow(z, 2.0), alpha * torch.abs(z) - 0.5 * alpha2)
+        return torch.where(
+            torch.abs(z) <= alpha,
+            0.5 * torch.pow(z, 2.0),
+            alpha * torch.abs(z) - 0.5 * alpha2,
+        )
 
     @staticmethod
     def kappa(z, alpha=1.0):
         indx = torch.abs(z) <= alpha
         z2 = torch.pow(z, 2.0)
         alpha_on_z = alpha / torch.abs(z)
-        return torch.where(indx, torch.ones_like(z), alpha_on_z), torch.where(indx, torch.zeros_like(z), -1.0 * alpha_on_z / z2)
+        return torch.where(indx, torch.ones_like(z), alpha_on_z), torch.where(
+            indx, torch.zeros_like(z), -1.0 * alpha_on_z / z2
+        )
 
 
 class Welsch(Penalty):
     """Welsch penalty."""
+
     is_convex = False
 
     @staticmethod
@@ -107,20 +120,26 @@ class Welsch(Penalty):
 
 class TruncQuad(Penalty):
     """Truncated quadratic penalty."""
+
     is_convex = False
 
     @staticmethod
     def phi(z, alpha=1.0):
         indx = torch.abs(z) <= alpha
-        return 0.5 * torch.where(indx, torch.pow(z, 2.0), torch.full_like(z, alpha * alpha))
+        return 0.5 * torch.where(
+            indx, torch.pow(z, 2.0), torch.full_like(z, alpha * alpha)
+        )
 
     @staticmethod
     def kappa(z, alpha=1.0):
         indx = torch.abs(z) <= alpha
-        return torch.where(indx, torch.ones_like(z), torch.zeros_like(z)), torch.zeros_like(z)
+        return torch.where(
+            indx, torch.ones_like(z), torch.zeros_like(z)
+        ), torch.zeros_like(z)
 
 
 # --- PyTorch Function --------------------------------------------------------
+
 
 class RobustVectorPool2dFcn(torch.autograd.Function):
     """PyTorch autograd function for robust vector pooling. Input (B,C,*) -> output (B,C)."""
@@ -131,8 +150,16 @@ class RobustVectorPool2dFcn(torch.autograd.Function):
         x = x.detach()
         y = y.clone()
         y.requires_grad = True
-        opt = torch.optim.LBFGS([y], lr=1.0, max_iter=100, max_eval=None,
-            tolerance_grad=1e-05, tolerance_change=1e-09, history_size=5, line_search_fn=None)
+        opt = torch.optim.LBFGS(
+            [y],
+            lr=1.0,
+            max_iter=100,
+            max_eval=None,
+            tolerance_grad=1e-05,
+            tolerance_change=1e-09,
+            history_size=5,
+            line_search_fn=None,
+        )
 
         def reevaluate():
             opt.zero_grad()
@@ -145,7 +172,6 @@ class RobustVectorPool2dFcn(torch.autograd.Function):
         opt.step(reevaluate)
 
         return y
-
 
     @staticmethod
     def forward(ctx, x, penalty, alpha=1.0, restarts=0, hess_reg=1.0e-16):
@@ -162,20 +188,49 @@ class RobustVectorPool2dFcn(torch.autograd.Function):
             else:
                 y_mean = torch.mean(x.view(B, C, -1), dim=2)
                 y = RobustVectorPool2dFcn._optimize(x, y_mean, penalty, alpha)
-                f = penalty.phi(torch.linalg.norm((y.view(B, C, 1) - x.view(B, C, -1)), dim=1), alpha).view(B, -1).sum(-1)
+                f = (
+                    penalty.phi(
+                        torch.linalg.norm((y.view(B, C, 1) - x.view(B, C, -1)), dim=1),
+                        alpha,
+                    )
+                    .view(B, -1)
+                    .sum(-1)
+                )
 
                 y_median, _ = torch.median(x.view(B, C, -1), dim=2)
                 y_median = RobustVectorPool2dFcn._optimize(x, y_median, penalty, alpha)
-                f_median = penalty.phi(torch.linalg.norm((y_median.view(B, C, 1) - x.view(B, C, -1)), dim=1), alpha).view(B, -1).sum(-1)
+                f_median = (
+                    penalty.phi(
+                        torch.linalg.norm(
+                            (y_median.view(B, C, 1) - x.view(B, C, -1)), dim=1
+                        ),
+                        alpha,
+                    )
+                    .view(B, -1)
+                    .sum(-1)
+                )
                 y = torch.where((f <= f_median).view(B, 1), y, y_median)
                 f = torch.minimum(f, f_median)
 
                 if restarts > 0:
                     # choose points evenly spaced in batch (can be randomly chosen but that affects reproducibility)
-                    for i in torch.linspace(start=0, end=x.view(B, C, -1).shape[2] - 1, steps=restarts):
+                    for i in torch.linspace(
+                        start=0, end=x.view(B, C, -1).shape[2] - 1, steps=restarts
+                    ):
                         y_init = x.view(B, C, -1)[:, :, int(i.item())]
-                        y_final = RobustVectorPool2dFcn._optimize(x, y_init, penalty, alpha)
-                        f_final = penalty.phi(torch.linalg.norm((y_final.view(B, C, 1) - x.view(B, C, -1)), dim=1), alpha).view(B, -1).sum(-1)
+                        y_final = RobustVectorPool2dFcn._optimize(
+                            x, y_init, penalty, alpha
+                        )
+                        f_final = (
+                            penalty.phi(
+                                torch.linalg.norm(
+                                    (y_final.view(B, C, 1) - x.view(B, C, -1)), dim=1
+                                ),
+                                alpha,
+                            )
+                            .view(B, -1)
+                            .sum(-1)
+                        )
                         y = torch.where((f < f_final).view(B, 1), y, y_final)
                         f = torch.minimum(f, f_final)
 
@@ -199,36 +254,54 @@ class RobustVectorPool2dFcn(torch.autograd.Function):
 
         k1, k2 = ctx.penalty.kappa(z, ctx.alpha)
         if torch.all(k2 == 0.0):
-            return (k1 * (y_grad / k1.sum(dim=2)).view(B, C, 1)).reshape(x.shape), None, None, None, None
+            return (
+                (k1 * (y_grad / k1.sum(dim=2)).view(B, C, 1)).reshape(x.shape),
+                None,
+                None,
+                None,
+                None,
+            )
 
-        H = k1.sum(dim=2).view(B, 1, 1) * torch.eye(C, dtype=x.dtype, device=x.device).view(1, C, C) + \
-            torch.einsum("bik,bjk->bij", x_minus_y, k2 * x_minus_y)
+        H = k1.sum(dim=2).view(B, 1, 1) * torch.eye(
+            C, dtype=x.dtype, device=x.device
+        ).view(1, C, C) + torch.einsum("bik,bjk->bij", x_minus_y, k2 * x_minus_y)
         try:
-            L = torch.cholesky(H + ctx.hess_reg * torch.eye(C, dtype=x.dtype, device=x.device).view(1, C, C))
+            L = torch.cholesky(
+                H
+                + ctx.hess_reg
+                * torch.eye(C, dtype=x.dtype, device=x.device).view(1, C, C)
+            )
             v = torch.cholesky_solve(y_grad.view(B, C, -1), L).view(B, C)
         except:
-            warnings.warn("backward pass encountered a singular matrix for penalty function {}".format(ctx.penalty.__name__))
+            warnings.warn(
+                f"backward pass encountered a singular matrix for penalty function {ctx.penalty.__name__}"
+            )
             v = torch.empty_like(y_grad)
             for b in range(B):
                 try:
                     L = torch.cholesky(H[b, :, :])
-                    v[b, :] = torch.cholesky_solve(y_grad[b, :].view(C, 1), L).view(1, C)
+                    v[b, :] = torch.cholesky_solve(y_grad[b, :].view(C, 1), L).view(
+                        1, C
+                    )
                 except:
-                    v[b, :] = torch.lstsq(y_grad[b, :].view(C, 1), H[b, :, :])[0].view(1, C)
-
+                    v[b, :] = torch.lstsq(y_grad[b, :].view(C, 1), H[b, :, :])[0].view(
+                        1, C
+                    )
 
         w = torch.einsum("bi,bik->bk", v, k2 * x_minus_y)
-        x_grad = (k1 * v.view(B, C, 1) + torch.einsum("bk,bik->bik", w, x_minus_y)).reshape(x.shape)
+        x_grad = (
+            k1 * v.view(B, C, 1) + torch.einsum("bk,bik->bik", w, x_minus_y)
+        ).reshape(x.shape)
 
         return x_grad, None, None, None, None
 
 
 # --- PyTorch Layer -----------------------------------------------------------
 
-class RobustVectorPool2d(nn.Module):
 
+class RobustVectorPool2d(nn.Module):
     def __init__(self, penalty, alpha=1.0, restarts=0):
-        super(RobustVectorPool2d, self).__init__()
+        super().__init__()
         self.penalty = penalty
         self.alpha = alpha
         self.restarts = restarts
@@ -239,8 +312,7 @@ class RobustVectorPool2d(nn.Module):
 
 # --- Testing -----------------------------------------------------------------
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     from torch.autograd import gradcheck
 
     torch.manual_seed(0)
@@ -256,14 +328,18 @@ if __name__ == '__main__':
     penalties = [Quadratic, PseudoHuber, Huber, Welsch, TruncQuad]
     for p in penalties:
         y = f(x, p, 1.0)
-        print("{}: {}".format(p.__name__, y))
-        z = torch.linalg.norm(y.view(y.shape[0], y.shape[1], -1) - x.view(x.shape[0], x.shape[1], -1), dim=1, keepdim=True)
+        print(f"{p.__name__}: {y}")
+        z = torch.linalg.norm(
+            y.view(y.shape[0], y.shape[1], -1) - x.view(x.shape[0], x.shape[1], -1),
+            dim=1,
+            keepdim=True,
+        )
         print(torch.histc(z.flatten()))
 
     # evaluate gradient
     x.requires_grad = True
     for alpha in [1.0, 2.0, 10.0]:
-        print("\nalpha = {}".format(alpha))
+        print(f"\nalpha = {alpha}")
         for p in penalties:
             test = gradcheck(f, (x, p, alpha, 0, 0.0), eps=1e-6, atol=1e-3, rtol=1e-6)
-            print("{}: {}".format(p.__name__, test))
+            print(f"{p.__name__}: {test}")
