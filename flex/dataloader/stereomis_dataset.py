@@ -242,7 +242,10 @@ class StereoMISDataset(Dataset):
         img_eval_interval = (
             1 if self.N_vis < 0 else len(self.meta["frames"]) // self.N_vis
         )
-        idxs = list(range(0, len(self.meta["frames"]), img_eval_interval))
+
+        max_val = min(350, len(self.meta["frames"]))
+        idxs = list(range(0, max_val, img_eval_interval))
+
         for i in tqdm(
             idxs, desc=f"Loading data {self.split} ({len(idxs)})"
         ):  # img_list:#
