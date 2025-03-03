@@ -1028,10 +1028,10 @@ def test_weights(
         var = np.stack(all_weights, 0)
         var = np.var(var[:, j])
         ax.set_title(
-            f"ray at test view {idx} and position: Width:{ray_idxs[j]%W} and Height:{(ray_idxs[j]//W)%H} Var:{var}"
+            f"ray at test view {idx} and position: Width:{ray_idxs[j] % W} and Height:{(ray_idxs[j] // W) % H} Var:{var}"
         )
         fig.savefig(
-            f"{savePath}/weight_plot_{idx}_{ray_idxs[j]%W}_{(ray_idxs[j]//W)%H}.png"
+            f"{savePath}/weight_plot_{idx}_{ray_idxs[j] % W}_{(ray_idxs[j] // W) % H}.png"
         )
         pixel_rgb = copy.deepcopy(gt_rgb.detach().cpu())
         pixel_rgb = pixel_rgb.clamp(0.0, 1.0).detach().cpu()
@@ -1040,10 +1040,11 @@ def test_weights(
         pixel_mask = torch.ones((H, W, 3))
         pixel_mask[(ray_idxs[j] // W) % H, ray_idxs[j] % W] = torch.tensor([0, 255, 0])
         imageio.imwrite(
-            f"{savePath}/img_{idx}_{ray_idxs[j]%W}_{(ray_idxs[j]//W)%H}.png", pixel_rgb
+            f"{savePath}/img_{idx}_{ray_idxs[j] % W}_{(ray_idxs[j] // W) % H}.png",
+            pixel_rgb,
         )
         imageio.imwrite(
-            f"{savePath}/img_mask_{idx}_{ray_idxs[j]%W}_{(ray_idxs[j]//W)%H}.png",
+            f"{savePath}/img_mask_{idx}_{ray_idxs[j] % W}_{(ray_idxs[j] // W) % H}.png",
             pixel_mask,
         )
 
@@ -1199,7 +1200,7 @@ def test_weights_local(
     pixel_rgb = (pixel_rgb.numpy() * 255).astype("uint8")
     imageio.imwrite(f"{savePath}/img.png", pixel_rgb)
     print(
-        f"Fwd Mean: {torch.mean(torch.abs(fwd_flow).cuda().view(-1, 2)[mask.view(-1)], dim=0)} vs {torch.mean(torch.abs(fwd_flow).cuda().view(-1, 2)[~mask.view(-1)],dim=0)}"
+        f"Fwd Mean: {torch.mean(torch.abs(fwd_flow).cuda().view(-1, 2)[mask.view(-1)], dim=0)} vs {torch.mean(torch.abs(fwd_flow).cuda().view(-1, 2)[~mask.view(-1)], dim=0)}"
     )
     print(
         f"Fwd Min: {torch.min(torch.abs(fwd_flow).view(-1, 2).cuda()[mask.view(-1)], dim=0)[0]} vs {torch.min(torch.abs(fwd_flow).cuda().view(-1, 2)[~mask.view(-1)], dim=0)[0]}"
@@ -1265,14 +1266,8 @@ def evaluation(
     """
     Evaluate the model on the test rays and compute metrics.
     """
-    PSNRs, rgb_maps, depth_maps, gt_depth_maps, gt_rgb_maps, poses_vis = (
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-    )
+    PSNRs, rgb_maps, depth_maps, gt_depth_maps, gt_rgb_maps, poses_vis = [], [], [], [], [], []  # fmt: skip
+
     msssims, ssims, l_alex, l_vgg, depth_errors = [], [], [], [], []
     os.makedirs(savePath, exist_ok=True)
     os.makedirs(savePath + "/rgbd", exist_ok=True)
@@ -1679,14 +1674,14 @@ def evaluation(
             depth_error = np.mean(np.asarray(depth_errors))
             with open(f"{savePath}/{prefix}mean.txt", "w") as f:
                 f.write(
-                    f"PSNR: {psnr}, SSIM: {ssim}, MS-SSIM: {msssim}, LPIPS_a: {l_a}, LPIPS_v: {l_v}, L1-Dist: {depth_error}, L1-Dist(mm): {depth_error*test_dataset.original_depth_scale}\n"
+                    f"PSNR: {psnr}, SSIM: {ssim}, MS-SSIM: {msssim}, LPIPS_a: {l_a}, LPIPS_v: {l_v}, L1-Dist: {depth_error}, L1-Dist(mm): {depth_error * test_dataset.original_depth_scale}\n"
                 )
                 print(
-                    f"PSNR: {psnr}, SSIM: {ssim}, MS-SSIM: {msssim}, LPIPS_a: {l_a}, LPIPS_v: {l_v}, L1-Dist: {depth_error}, L1-Dist(mm): {depth_error*test_dataset.original_depth_scale}\n"
+                    f"PSNR: {psnr}, SSIM: {ssim}, MS-SSIM: {msssim}, LPIPS_a: {l_a}, LPIPS_v: {l_v}, L1-Dist: {depth_error}, L1-Dist(mm): {depth_error * test_dataset.original_depth_scale}\n"
                 )
                 for i in range(len(PSNRs)):
                     f.write(
-                        f"Index {i}, PSNR: {PSNRs[i]}, SSIM: {ssims[i]}, MS-SSIM: {msssim}, LPIPS_a: {l_alex[i]}, LPIPS_v: {l_vgg[i]}, L1-Dist: {depth_errors[i]}, L1-Dist(mm): {depth_errors[i]*test_dataset.original_depth_scale}\n"
+                        f"Index {i}, PSNR: {PSNRs[i]}, SSIM: {ssims[i]}, MS-SSIM: {msssim}, LPIPS_a: {l_alex[i]}, LPIPS_v: {l_vgg[i]}, L1-Dist: {depth_errors[i]}, L1-Dist(mm): {depth_errors[i] * test_dataset.original_depth_scale}\n"
                     )
         else:
             with open(f"{savePath}/{prefix}mean.txt", "w") as f:
@@ -2317,14 +2312,14 @@ def evaluation_local(
             depth_error = np.mean(np.asarray(depth_errors))
             with open(f"{savePath}/{prefix}mean.txt", "w") as f:
                 f.write(
-                    f"PSNR: {psnr}, SSIM: {ssim}, MS-SSIM: {msssim}, LPIPS_a: {l_a}, LPIPS_v: {l_v}, L1-Dist: {depth_error}, L1-Dist(mm): {depth_error*test_dataset.original_depth_scale}\n"
+                    f"PSNR: {psnr}, SSIM: {ssim}, MS-SSIM: {msssim}, LPIPS_a: {l_a}, LPIPS_v: {l_v}, L1-Dist: {depth_error}, L1-Dist(mm): {depth_error * test_dataset.original_depth_scale}\n"
                 )
                 print(
-                    f"PSNR: {psnr}, SSIM: {ssim}, MS-SSIM: {msssim}, LPIPS_a: {l_a}, LPIPS_v: {l_v}, L1-Dist: {depth_error}, L1-Dist(mm): {depth_error*test_dataset.original_depth_scale}\n"
+                    f"PSNR: {psnr}, SSIM: {ssim}, MS-SSIM: {msssim}, LPIPS_a: {l_a}, LPIPS_v: {l_v}, L1-Dist: {depth_error}, L1-Dist(mm): {depth_error * test_dataset.original_depth_scale}\n"
                 )
                 for i in range(len(PSNRs)):
                     f.write(
-                        f"Index {i}, PSNR: {PSNRs[i]}, SSIM: {ssims[i]}, MS-SSIM: {msssim}, LPIPS_a: {l_alex[i]}, LPIPS_v: {l_vgg[i]}, L1-Dist: {depth_errors[i]}, L1-Dist(mm): {depth_errors[i]*test_dataset.original_depth_scale}\n"
+                        f"Index {i}, PSNR: {PSNRs[i]}, SSIM: {ssims[i]}, MS-SSIM: {msssim}, LPIPS_a: {l_alex[i]}, LPIPS_v: {l_vgg[i]}, L1-Dist: {depth_errors[i]}, L1-Dist(mm): {depth_errors[i] * test_dataset.original_depth_scale}\n"
                     )
         else:
             with open(f"{savePath}/{prefix}mean.txt", "w") as f:
