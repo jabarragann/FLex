@@ -25,9 +25,9 @@ class CameraModel:
     focal: float
 
     def __post_init__(self):
-        self.calculate_camera_rays()
+        self._calculate_rays_in_cam_coord()
 
-    def calculate_camera_rays(self):
+    def _calculate_rays_in_cam_coord(self):
         self.directions = get_ray_directions_blender(
             self.h,
             self.w,
@@ -41,6 +41,25 @@ class CameraModel:
         self.directions = self.directions / torch.norm(
             self.directions, dim=-1, keepdim=True
         )
+
+    def generate_rays_in_world_coord(self, c2w: np.ndarray, fmt: str = "cv2"):
+        if fmt != "cv2":
+            raise NotImplementedError("Only opencv format is supported")
+
+        blender2opencv = np.array(
+            [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+        )
+
+        pose_blender = c2w @ blender2opencv
+        pose_blender = torch.FloatTensor(pose_blender)
+
+        # Create rays
+        rays_o, rays_d = get_rays(
+            self.directions, pose_blender
+        )  # Get rays, both (h*w, 3).
+        rays = torch.cat([rays_o, rays_d], 1)
+
+        return rays
 
 
 def create_camera_model(poses_json: dict, downsample: float = 1.0) -> CameraModel:
@@ -65,31 +84,61 @@ def load_data(train_transforms_path, test_transforms_path):
     print(camera_model.directions.shape)
 
     # Load pose
-    blender2opencv = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
-    frame = test_poses_json["frames"][40]
-    pose = np.array(frame["transform_matrix"]) @ blender2opencv
-    c2w = torch.FloatTensor(pose)
+    frame = test_poses_json["frames"][20]
 
     # Create rays
-    rays_o, rays_d = get_rays(camera_model.directions, c2w)  # Get rays, both (h*w, 3).
-    rays = torch.cat([rays_o, rays_d], 1)
+    pose_cv = np.array(frame["transform_matrix"])
+    rays = camera_model.generate_rays_in_world_coord(pose_cv, fmt="cv2")
 
     # Load time
     cur_time = torch.tensor(frame["time"])
-    cur_time = cur_time.expand(rays_o.shape[0], 1)
+    cur_time = cur_time.expand(rays.shape[0], 1)
     time_scale = 1.0
     cur_time = time_scale * (cur_time * 2.0 - 1.0)
 
-    print(rays_o.shape, rays_d.shape)
+    # print(rays_o.shape, rays_d.shape)
     print(rays.shape, cur_time.shape)
 
     return rays, cur_time, camera_model
 
 
+@torch.no_grad()
+def render_full_image(
+    model: HexPlane,
+    rays: torch.Tensor,
+    cur_time: torch.Tensor,
+    width: int,
+    height: int,
+    batch_size: int = 8192,
+) -> np.ndarray:
+    # render
+    full_rgb = []
+
+    for i in range(0, int(np.ceil(cur_time.shape[0] / batch_size))):
+        start = i * batch_size
+        end = start + batch_size
+        rgb_map, depth_map, alpha, z_vals, xyz_sampled, weight = model.forward(
+            rays[start:end, :],
+            cur_time[start:end, :],
+            white_bg=True,
+            is_train=False,
+            ndc_ray=False,
+            N_samples=-1,
+        )
+        full_rgb.append(rgb_map)
+        print(rgb_map.shape)
+
+    full_rgb = torch.cat(full_rgb, 0)
+    full_rgb = full_rgb.reshape(height, width, 3)
+
+    full_rgb_uint = (full_rgb * 255).cpu().numpy().astype(np.uint8)
+
+    return full_rgb_uint
+
+
 @click.command()
 @click.option("-p", "--model_path", "model_path", help="Path to the model file")
 def main(model_path: str):
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # load model
     model: HexPlane = torch.load(model_path, weights_only=False)
@@ -106,28 +155,9 @@ def main(model_path: str):
     cur_time = cur_time.to(device)
 
     # render
-    batch_size = 4096 * 2
-    full_rgb = []
-    with torch.no_grad():
-        for i in range(0, int(np.ceil(cur_time.shape[0] / batch_size))):
-            start = i * batch_size
-            end = start + batch_size
-            rgb_map, depth_map, alpha, z_vals, xyz_sampled, weight = model.forward(
-                rays[start:end, :],
-                cur_time[start:end, :],
-                white_bg=True,
-                is_train=False,
-                ndc_ray=False,
-                N_samples=-1,
-            )
-            full_rgb.append(rgb_map)
-            print(rgb_map.shape)
-
-    full_rgb = torch.cat(full_rgb, 0)
-    full_rgb = full_rgb.reshape(camera_model.h, camera_model.w, 3)
-
-    print(full_rgb.shape)
-    full_rgb_uint = (full_rgb * 255).cpu().numpy().astype(np.uint8)
+    full_rgb_uint = render_full_image(
+        model, rays, cur_time, camera_model.w, camera_model.h, batch_size=8192
+    )
 
     # save image
     iio.imwrite("output.png", full_rgb_uint)
