@@ -8,6 +8,8 @@ import click
 import imageio.v3 as iio
 import numpy as np
 import torch
+from natsort import natsorted
+from tqdm import tqdm
 
 sys.path.append(os.getcwd())
 # print(sys.path)
@@ -74,7 +76,7 @@ def create_camera_model(poses_json: dict, downsample: float = 1.0) -> CameraMode
     return camera_model
 
 
-def load_data(train_transforms_path, test_transforms_path):
+def load_data(test_idx, train_transforms_path, test_transforms_path):
     with open(train_transforms_path) as f:
         train_poses_json = json.load(f)
     with open(test_transforms_path) as f:
@@ -84,7 +86,7 @@ def load_data(train_transforms_path, test_transforms_path):
     print(camera_model.directions.shape)
 
     # Load pose
-    frame = test_poses_json["frames"][20]
+    frame = test_poses_json["frames"][test_idx]
 
     # Create rays
     pose_cv = np.array(frame["transform_matrix"])
@@ -126,7 +128,7 @@ def render_full_image(
             N_samples=-1,
         )
         full_rgb.append(rgb_map)
-        print(rgb_map.shape)
+        # print(rgb_map.shape)
 
     full_rgb = torch.cat(full_rgb, 0)
     full_rgb = full_rgb.reshape(height, width, 3)
@@ -168,13 +170,14 @@ def single_render(model_path: str):
     transforms_train = transforms_path / "transforms_train.json"
     transforms_test = transforms_path / "transforms_test.json"
 
-    rays, cur_time, camera_model = load_data(transforms_train, transforms_test)
+    rays, cur_time, camera_model = load_data(20, transforms_train, transforms_test)
     rays = rays.to(device)
     cur_time = cur_time.to(device)
 
     # render
+    # batch_size = 8192
     full_rgb_uint = render_full_image(
-        model, rays, cur_time, camera_model.w, camera_model.h, batch_size=8192
+        model, rays, cur_time, camera_model.w, camera_model.h, batch_size=8142
     )
 
     # save image
@@ -185,7 +188,48 @@ def single_render(model_path: str):
 @click.command()
 @model_path_option
 def time_change_render(model_path: str):
-    print("time change render")
+    outpath = Path("./test_outputs/time_render/")
+    if not outpath.exists():
+        outpath.mkdir(parents=True)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # load model
+    model: HexPlane = torch.load(model_path, weights_only=False)
+    model.eval()
+    model.to(device)
+
+    # Load camera model
+    transforms_path = Path("/home/juan95/JuanData/StereoMIS_FLex/P2_8_1/")
+    transforms_train = transforms_path / "transforms_train.json"
+    transforms_test = transforms_path / "transforms_test.json"
+
+    rays, cur_time, camera_model = load_data(20, transforms_train, transforms_test)
+    rays = rays.to(device)
+    cur_time = cur_time.to(device)
+
+    time_range = np.linspace(0.0, 0.030, 30)
+
+    # Generate frames
+    for idx, t in enumerate(tqdm(time_range, desc="Rendering time change")):
+        cur_time = cur_time + t
+        print(f"image time: {cur_time[0, 0]:.4f}")
+        full_rgb_uint = render_full_image(
+            model, rays, cur_time, camera_model.w, camera_model.h, batch_size=8192
+        )
+        # save image
+        iio.imwrite(outpath / f"output_{idx:03d}.jpeg", full_rgb_uint)
+
+    # Convert frames into video
+    images = [str(img) for img in outpath.glob("*.jpeg")]
+    images = natsorted(images)
+    fps = 3
+    with iio.imopen(outpath / "out.mp4", "w", plugin="pyav") as writer:
+        writer.init_video_stream("libx264", fps=fps)  # Using H.264 codec
+        for image_file in images:
+            frame = iio.imread(image_file)  # Read the image
+            writer.write_frame(frame)  # Write the frame
+
+    print("Video saved to output.mp4")
 
 
 main.add_command(single_render)
