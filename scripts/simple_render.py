@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 sys.path.append(os.getcwd())
-print(sys.path)
+# print(sys.path)
 
 from flex.dataloader.ray_utils import get_ray_directions_blender, get_rays
 from flex.model.HexPlane import HexPlane
@@ -136,9 +136,27 @@ def render_full_image(
     return full_rgb_uint
 
 
+########
+# CLI
+########
+def model_path_option(func):
+    return click.option(
+        "-p",
+        "--model-path",
+        required=True,
+        type=click.Path(exists=True),
+        help="Path to the model file.",
+    )(func)
+
+
+@click.group()
+def main():
+    pass
+
+
 @click.command()
-@click.option("-p", "--model_path", "model_path", help="Path to the model file")
-def main(model_path: str):
+@model_path_option
+def single_render(model_path: str):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # load model
     model: HexPlane = torch.load(model_path, weights_only=False)
@@ -160,9 +178,18 @@ def main(model_path: str):
     )
 
     # save image
-    iio.imwrite("output.png", full_rgb_uint)
+    iio.imwrite("./test_outputs/output.png", full_rgb_uint)
     print("Image saved to output.png")
 
+
+@click.command()
+@model_path_option
+def time_change_render(model_path: str):
+    print("time change render")
+
+
+main.add_command(single_render)
+main.add_command(time_change_render)
 
 if __name__ == "__main__":
     main()
