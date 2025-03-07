@@ -259,7 +259,8 @@ class StereoMISDataset(Dataset):
             1 if self.N_vis < 0 else len(self.meta["frames"]) // self.N_vis
         )
 
-        max_val = min(350, len(self.meta["frames"]))
+        #max_val = min(350, len(self.meta["frames"]))
+        max_val = len(self.meta["frames"])
         idxs = list(range(0, max_val, img_eval_interval))
 
         for i in tqdm(
