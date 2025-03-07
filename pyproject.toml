@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["flex"]  
+
+[project]
+name = "flex"
+version = "1.0.0"
+dependencies = [
+    "rick",
+    "click"
+]
+requires-python = ">=3.9"
+authors = [
+    {name = "Juan Antonio Barragan", email = "jbarrag3@jh.edu"}
+]
+maintainers = [ 
+    {name = "Juan Antonio Barragan", email = "jbarrag3@jh.edu"}
+]
+description = """
+FORK from FLex: Joint Pose and Dynamic Radiance Fields 
+Optimization for Stereo Endoscopic Videos.
+"""
+
+readme = "README.md"
+keywords = ["nerf"]
