@@ -1,8 +1,6 @@
-import copy
 import json
 import math
 import os
-import sys
 
 import cv2
 import numpy as np
@@ -15,7 +13,7 @@ from tqdm import tqdm
 
 from flex.render.util.util import decode_flow
 
-from .ray_utils import get_ray_directions_blender, get_rays, ndc_rays_blender, read_pfm
+from .ray_utils import get_ray_directions_blender, get_rays, ndc_rays_blender
 
 blender2opencv = torch.Tensor([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
 
@@ -259,7 +257,7 @@ class StereoMISDataset(Dataset):
             1 if self.N_vis < 0 else len(self.meta["frames"]) // self.N_vis
         )
 
-        #max_val = min(350, len(self.meta["frames"]))
+        # max_val = min(350, len(self.meta["frames"]))
         max_val = len(self.meta["frames"])
         idxs = list(range(0, max_val, img_eval_interval))
 
