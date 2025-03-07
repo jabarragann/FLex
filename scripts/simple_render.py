@@ -1,7 +1,5 @@
-import json
 import os
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 import click
@@ -14,128 +12,9 @@ from tqdm import tqdm
 sys.path.append(os.getcwd())
 # print(sys.path)
 
-from flex.dataloader.ray_utils import get_ray_directions_blender, get_rays
+from JuanFlex.utils import load_data, render_full_image
+
 from flex.model.HexPlane import HexPlane
-
-
-@dataclass
-class CameraModel:
-    w: int
-    h: int
-    cx: float
-    cy: float
-    focal: float
-
-    def __post_init__(self):
-        self._calculate_rays_in_cam_coord()
-
-    def _calculate_rays_in_cam_coord(self):
-        self.directions = get_ray_directions_blender(
-            self.h,
-            self.w,
-            [self.focal, self.focal],
-            [
-                self.cx,
-                self.cy,
-            ],  # test cx and cy instead of standard center TODO: remove if experiment failed
-        )  # (h, w, 3)
-
-        self.directions = self.directions / torch.norm(
-            self.directions, dim=-1, keepdim=True
-        )
-
-    def generate_rays_in_world_coord(self, c2w: np.ndarray, fmt: str = "cv2"):
-        if fmt != "cv2":
-            raise NotImplementedError("Only opencv format is supported")
-
-        blender2opencv = np.array(
-            [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
-        )
-
-        pose_blender = c2w @ blender2opencv
-        pose_blender = torch.FloatTensor(pose_blender)
-
-        # Create rays
-        rays_o, rays_d = get_rays(
-            self.directions, pose_blender
-        )  # Get rays, both (h*w, 3).
-        rays = torch.cat([rays_o, rays_d], 1)
-
-        return rays
-
-
-def create_camera_model(poses_json: dict, downsample: float = 1.0) -> CameraModel:
-    # fix img_wh dim:
-    w, h = poses_json["w"], poses_json["h"]
-    w, h = int(w), int(h)
-    cx = poses_json["cx"] / downsample
-    cy = poses_json["cy"] / downsample
-    focal = poses_json["fl_x"] / downsample
-    camera_model = CameraModel(w, h, cx, cy, focal)
-
-    return camera_model
-
-
-def load_data(test_idx, train_transforms_path, test_transforms_path):
-    with open(train_transforms_path) as f:
-        train_poses_json = json.load(f)
-    with open(test_transforms_path) as f:
-        test_poses_json = json.load(f)
-
-    camera_model = create_camera_model(train_poses_json)
-    print(camera_model.directions.shape)
-
-    # Load pose
-    frame = test_poses_json["frames"][test_idx]
-
-    # Create rays
-    pose_cv = np.array(frame["transform_matrix"])
-    rays = camera_model.generate_rays_in_world_coord(pose_cv, fmt="cv2")
-
-    # Load time
-    cur_time = torch.tensor(frame["time"])
-    cur_time = cur_time.expand(rays.shape[0], 1)
-    time_scale = 1.0
-    cur_time = time_scale * (cur_time * 2.0 - 1.0)
-
-    # print(rays_o.shape, rays_d.shape)
-    print(rays.shape, cur_time.shape)
-
-    return rays, cur_time, camera_model
-
-
-@torch.no_grad()
-def render_full_image(
-    model: HexPlane,
-    rays: torch.Tensor,
-    cur_time: torch.Tensor,
-    width: int,
-    height: int,
-    batch_size: int = 8192,
-) -> np.ndarray:
-    # render
-    full_rgb = []
-
-    for i in range(0, int(np.ceil(cur_time.shape[0] / batch_size))):
-        start = i * batch_size
-        end = start + batch_size
-        rgb_map, depth_map, alpha, z_vals, xyz_sampled, weight = model.forward(
-            rays[start:end, :],
-            cur_time[start:end, :],
-            white_bg=True,
-            is_train=False,
-            ndc_ray=False,
-            N_samples=-1,
-        )
-        full_rgb.append(rgb_map)
-        # print(rgb_map.shape)
-
-    full_rgb = torch.cat(full_rgb, 0)
-    full_rgb = full_rgb.reshape(height, width, 3)
-
-    full_rgb_uint = (full_rgb * 255).cpu().numpy().astype(np.uint8)
-
-    return full_rgb_uint
 
 
 ########
