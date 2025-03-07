@@ -9,6 +9,8 @@ def init_model(cfg, aabb, near_far, device):
     reso_cur = N_to_reso(cfg.model.N_voxel_init, aabb, cfg.model.nonsquare_voxel)
 
     if cfg.systems.ckpt is not None:
+        # if cfg.model.model_name == "HexPlane":
+        #     model = HexPlane(aabb, reso_cur, device, cfg.model.time_grid_init, near_far, **cfg.model)
         model = torch.load(cfg.systems.ckpt, map_location=device)
     else:
         # There are two types of upsampling: aligned and unaligned.
@@ -17,7 +19,11 @@ def init_model(cfg, aabb, near_far, device):
         if cfg.model.upsampling_type == "aligned":
             reso_cur = [reso_cur[i] // 2 * 2 + 1 for i in range(len(reso_cur))]
 
-        model = eval(cfg.model.model_name)(
-            aabb, reso_cur, device, cfg.model.time_grid_init, near_far, **cfg.model
-        )
+        if cfg.model.model_name == "HexPlane":
+            model = HexPlane(
+                aabb, reso_cur, device, cfg.model.time_grid_init, near_far, **cfg.model
+            )
+        else:
+            raise NotImplementedError
+
     return model, reso_cur

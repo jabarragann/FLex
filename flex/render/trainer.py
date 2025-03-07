@@ -553,7 +553,7 @@ class Trainer:
         gt_bwd = None
         fwd_mask = None
         bwd_mask = None
-        loss_weights = None
+        # loss_weights = None
         train_test_poses = False
         spec_mask = None
         # sample rays: shuffle all the rays of training dataset and sampled a batch of rays from them.
@@ -1460,7 +1460,7 @@ class Trainer:
                 weights = weights.reshape(weights.shape[0], weights.shape[1])
 
             # Optical flow loss
-            start_time_train_optical = time.time()
+            # start_time_train_optical = time.time()
             if (
                 self.cfg.data.flow_data
                 and (self.cfg.model.optical_flow_loss_weight > 0)
@@ -1913,6 +1913,7 @@ class Trainer:
                         )
                 else:
                     torch.save(model, f"{self.logfolder}/{self.cfg.expname}.th")
+                    # torch.save(model.state_dict(), f"{self.logfolder}/{self.cfg.expname}.th")
 
             # update iter count
             if not (self.cfg.local.progressive_opt and (not self.refine_model)):

@@ -75,6 +75,7 @@ def render_test(cfg):
     else:
         if not os.path.exists(cfg.systems.ckpt):
             print("the ckpt path does not exists!!")
+            print(f"{cfg.systems.ckpt}")
             return
 
         HexPlane = torch.load(cfg.systems.ckpt, map_location=device)
@@ -241,8 +242,11 @@ def reconstruction(cfg):
 def reconstruction_local(cfg):
     if cfg.local.progressive_opt:
         # must be pre-defined with fixed bound due to pose optimization
-        if cfg.data.cal_fine_bbox != False:
-            cfg.data.cal_fine_bbox = False
+        # ORIGINAL
+        # if cfg.data.cal_fine_bbox != False:
+        #     cfg.data.cal_fine_bbox = False
+        # modified
+        cfg.data.cal_fine_bbox = False
 
     if cfg.data.datasampler_type == "rays":
         train_dataset = get_train_dataset(cfg, is_stack=False)

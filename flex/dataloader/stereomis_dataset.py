@@ -212,7 +212,8 @@ class StereoMISDataset(Dataset):
 
         self.depth_scale_factor = self.meta["depth_scale_factor"]
         self.original_depth_scale = self.meta["depth_scale_factor"]
-        self.trans_center_shift = self.meta["recenter_trans"]
+        if "recenter_trans" in self.meta:
+            self.trans_center_shift = self.meta["recenter_trans"]
 
         # ray directions for all pixels, same for all images (same H, W, focal)
         self.directions = get_ray_directions_blender(
@@ -428,7 +429,7 @@ class StereoMISDataset(Dataset):
                     -1, *self.img_wh[::-1], 1
                 )
 
-        all_imgs = copy.deepcopy(self.all_rgbs.reshape(-1, *self.img_wh[::-1], 3))
+        # all_imgs = copy.deepcopy(self.all_rgbs.reshape(-1, *self.img_wh[::-1], 3))
 
         self.all_times = self.time_scale * (self.all_times * 2.0 - 1.0)
         self.max_depth_value = torch.max(self.all_depths)
@@ -548,7 +549,7 @@ class StereoMISDataset(Dataset):
 
     def get_new_pose_rays(self, pose, times, time):
         xs = list(np.zeros(times))
-        ys = list(np.zeros(times))
+        # ys = list(np.zeros(times))
         zs = list(np.zeros(times))
 
         rot_deg = 0.5
