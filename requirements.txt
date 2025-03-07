@@ -40,7 +40,7 @@ imageio==2.26.0
 imageio-ffmpeg==0.4.8
 importlib-metadata==6.8.0
 importlib-resources==6.0.1
-install==1.3.5
+##install==1.3.5
 ipython==8.12.2
 ipywidgets==8.1.0
 itsdangerous==2.1.2
@@ -60,9 +60,9 @@ MarkupSafe
 matplotlib==3.7.2
 matplotlib-inline==0.1.6
 mdurl==0.1.2
-mkl-fft==1.3.6
-mkl-random==1.2.2
-mkl-service==2.4.0
+#mkl-fft==1.3.6
+#mkl-random==1.2.2
+#mkl-service==2.4.0
 mpmath
 nbformat==5.7.0
 nest-asyncio==1.5.7
@@ -73,8 +73,8 @@ nvitop==1.3.1
 oauthlib==3.2.2
 olefile
 omegaconf==2.3.0
-open3d==0.17.0
-opencv-python==4.7.0.72
+#open3d==0.17.0
+#opencv-python==4.7.0.72
 packaging==23.1
 pandas==2.0.3
 parso==0.8.3

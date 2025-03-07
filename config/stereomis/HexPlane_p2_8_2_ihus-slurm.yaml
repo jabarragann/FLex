@@ -45,7 +45,7 @@ model:
   contract: True
 
 data:
-  datadir: "./data/StereoMIS_FLex/P2_8_1"
+  datadir: "./data/StereoMIS_FLex/P2_8_2"
   dataset_name: "stereomis"
   scene_bbox_min: [-2.0, -2.0, -2.0]
   scene_bbox_max: [2.0, 2.0, 2.0]
@@ -104,4 +104,4 @@ ray_idxs: [5000, 10000, 20000, 44000, 50000, 75000, 90000, 120000, 122000]
 local_models: False
 debug_mode: False
 
-expname: HexPlane_P2_8_1
+expname: HexPlane_P2_8_2
