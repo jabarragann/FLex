@@ -1,0 +1,110 @@
+systems:
+  basedir: "./logs/FLexPO/p2_8_2"
+  vis_every: 10000
+  seed: 101111024
+  save_ckpt_every: 5000
+
+model:
+  model_name: "HexPlane"
+  N_voxel_init: 262144
+  N_voxel_final: 134217728
+  step_ratio: 0.5
+  time_grid_init: 6
+  time_grid_final: 50
+  upsampling_type: unaligned
+  upsample_list: [10, 20, 50]
+  update_emptymask_list: [15, 30, 55]
+  fusion_one: "multiply"
+  fusion_two: "concat"
+  init_scale: 0.9
+  init_shift: 0.5
+  density_dim: 8
+  DensityMode: "general_MLP"
+  depth_loss: True
+  urf_depth_loss_weight: 0.01
+  optical_flow_loss_weight: 1.0
+  rgb_loss_weight: 1.0
+
+  # Empty mask setting
+  emptyMask_thres: 0.0001
+  rayMarch_weight_thres: 0.001
+
+  # TV loss
+  TV_t_s_ratio: 2.0  # ratio of TV loss along temporal and spatial dimensions
+  TV_weight_density: 0.0001
+  TV_weight_app: 0.0001
+
+  # Flow
+  predict_flow: True
+  opt_from_depth: True
+
+  # pose optim
+  barf_c2f: [0.000, 0.000]
+
+  # Contract scene
+  contract: True
+
+data:
+  datadir: "./data/StereoMIS_FLex/P2_8_2"
+  dataset_name: "stereomis"
+  scene_bbox_min: [-2.0, -2.0, -2.0]
+  scene_bbox_max: [2.0, 2.0, 2.0]
+  cal_fine_bbox: False
+  downsample: 1.0
+  near: 0.01
+  far: 1.0
+  depth_data: True
+  tool_mask: False
+  flow_data: True
+  use_ndc: False
+
+  datasampler_type: "images" #"images" #"hierach" #"rays"
+
+optim:
+  n_iters: 100 # local moels iters per frame
+  lr_decay_type: "exp"
+  batch_size: 4096
+  num_s_imgs: 16 #16 when pose optim else 1 for speed
+  optimize_poses: True
+  # optical flow loss
+  temp_decline: 10
+
+local:
+  # LocalHex
+  max_drift: 1.0
+  angle_threshold: 10.0 # in degrees
+  n_max_frames: 88
+  progressive_opt: True
+  n_init_frames: 5
+  use_preprocessed_poses: False
+  n_overlap: 30
+  add_frames_every: 100
+  use_camera_momentum: False
+
+render_test: True
+render_path: True
+render_train: False
+
+render_extra: False
+original_pose: False # keep pose from specific scene for all timesteps
+num_scene: 0
+render_extra_repeats: 0
+img_limit: 3000
+eval_every_img: 10
+
+create_pc: False
+pc_test_idx: [0, 20, 40, 60, 80, 100, 120]
+pc_icp: False
+compute_pc_cd: False
+visualize_4d_vol: False
+vis_occupancy: False
+
+test_weights: False
+test_view: 70
+ray_idxs: [800, 5000, 7000, 10000, 22000, 44000, 50000, 70050, 90000, 120000, 122000, 163150, 175000, 209000, 255000, 292010, 310540, 315100]
+
+# LocalHex
+local_models: True
+debug_mode: False
+
+expname: FLexPO_P2_8_2
