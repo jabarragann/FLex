@@ -29,9 +29,10 @@ class StereoDataset(Dataset):
 
     def __getitem__(self, item):
         img_l = cv2.cvtColor(cv2.imread(self.imgs[item]), cv2.COLOR_BGR2RGB)
-        img_r = cv2.cvtColor(
-            cv2.imread(self.imgs[item].replace("l.png", "r.png")), cv2.COLOR_BGR2RGB
+        img_r_path = (
+            self.imgs[item].replace("l.png", "r.png").replace("video_frames", "right")
         )
+        img_r = cv2.cvtColor(cv2.imread(img_r_path), cv2.COLOR_BGR2RGB)
         img_number = os.path.basename(self.imgs[item]).split("l.png")[0]
         mask = cv2.resize(
             cv2.imread(

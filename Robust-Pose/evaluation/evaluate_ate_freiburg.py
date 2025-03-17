@@ -1,5 +1,6 @@
 import sys
 
+sys.path.append("..")
 import numpy as np
 from core.metrics.trajectory_metrics import (
     absolute_trajectory_error,
@@ -57,11 +58,9 @@ def eval(
         )
     return (
         ate_rmse,
-        np.mean(rpe_trans),
-        np.mean(rpe_rot),
-        trans_error,
         rpe_trans,
         rpe_rot,
+        trans_error,
     )
 
 
@@ -121,3 +120,7 @@ if __name__ == "__main__":
     print("absolute_translational_error.std %f m" % np.std(trans_error))
     print("absolute_translational_error.min %f m" % np.min(trans_error))
     print("absolute_translational_error.max %f m" % np.max(trans_error))
+
+    print(f"ATE-RMSE {ate_rmse:0.4f}")
+    print(f"RPE-Trans {np.mean(rpe_trans):0.4f}")
+    print(f"RPE-Rot {np.mean(rpe_rot):0.4f}")
