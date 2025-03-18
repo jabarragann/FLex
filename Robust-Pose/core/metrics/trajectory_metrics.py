@@ -71,10 +71,13 @@ def absolute_trajectory_error(
     for gt, pred, v in zip(gt_poses, predicted_poses, valid):
         if v:
             trans_err.append(lib.sum((gt[:3, 3].T - pred[:3, 3]) ** 2))
+
     trans_err = np.asarray(trans_err)
     ate_pos = lib.sqrt(lib.mean(trans_err))
+
     if ret_align_T:
         return ate_pos, np.sqrt(trans_err), T, valid
+
     return ate_pos, np.sqrt(trans_err)
 
 
