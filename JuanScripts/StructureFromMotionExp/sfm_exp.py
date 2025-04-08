@@ -137,7 +137,7 @@ def main():
     # ## Did not work!
     # stereo_rectify_uncalibrated(left_img, right_img, inliers_pts1, inliers_pts2, F)
     # ## Seems bizarre.
-    # draw_epilines(left_img, F, inliers_pts1, inliers_pts2)
+    draw_epilines(left_img, F, inliers_pts1, inliers_pts2)
 
     K = np.array(
         [
