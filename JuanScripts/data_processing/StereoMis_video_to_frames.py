@@ -1,46 +1,54 @@
-from __future__ import annotations
-
-import os
-import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import click
 import cv2
 import imageio
+import numpy as np
 from tqdm import tqdm
-
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from VideoUtils import VideoOpenCV, frame_calculation, process_interlaced_frame
+from VideoUtils import VideoOpenCV, frame_calculation
 
 
-def process_video(
-    context: click.Context,
-    path: Path,
-    output_dir: str,
-    save_frames: bool,
-    start_time: str = "00:00:00",
-    end_time: str = "00:00:00",
-    downsample_factor: int = 1,
+@dataclass
+class MyContext:
+    input_video: Path
+    output_dir: Path
+    save_frames: bool
+    start_ts: str
+    end_ts: str
+    downsample_factor: int
+
+
+def split_frame(frame: np.ndarray):
+    W, H = frame.shape[1], frame.shape[0]
+    left = frame[0 : H // 2, 0:W]
+    right = frame[H // 2 :, 0:W]
+
+    return left, right
+
+
+def video_to_frames(
+    ctx: MyContext, max_res: int = 0, target_fps: int = -1, process_length: int = -1
 ):
     # Path to the input video
-    video_path = Path(path)
+    video_path = Path(ctx.input_video)
     video_cv2 = VideoOpenCV(video_path)
 
     # Output directories for left and right images
-    output_dir = video_path.parent / output_dir
+    output_dir = video_path.parent / ctx.output_dir
     output_dir.mkdir(exist_ok=True)
 
     # Save context
     args_file = output_dir / "arguments.txt"
     with open(args_file, "w") as f:
-        for key, value in context.params.items():
+        for key, value in asdict(ctx).items():
             f.write(f"{key}: {value}\n")
     print(f"Saved arguments to {args_file}")
 
     # Left and right directories
     left_dir = Path(".")
     right_dir = Path(".")
-    if save_frames:
+    if ctx.save_frames:
         left_dir = output_dir / "left_frames"
         right_dir = output_dir / "right_frames"
         left_dir.mkdir(exist_ok=True)
@@ -52,8 +60,10 @@ def process_video(
     # Set frames
     frame_count = 0
     save_count = 0
-    start_frame, end_frame = frame_calculation(start_time, end_time, video_cv2)
+    start_frame, end_frame = frame_calculation(ctx.start_ts, ctx.end_ts, video_cv2)
     video_cv2.set_start_frame(start_frame)
+
+    print(f"Start frame: {start_frame}, End frame: {end_frame}")
 
     with tqdm(
         total=video_cv2.total_frames, desc="Processing Video", unit="frame"
@@ -67,11 +77,11 @@ def process_video(
                 print(frame.shape)
                 cv2.imwrite(str(output_dir / "sample_interlaced_img.png"), frame)
 
-            left_image, right_image = process_interlaced_frame(frame)
+            left_image, right_image = split_frame(frame)
 
             # Save extracted frames
-            if save_frames:
-                if (frame_count - start_frame) % downsample_factor == 0:
+            if ctx.save_frames:
+                if (frame_count - start_frame) % ctx.downsample_factor == 0:
                     left_filename = left_dir / f"left_{save_count:04d}.png"
                     right_filename = right_dir / f"right_{save_count:04d}.png"
                     cv2.imwrite(str(left_filename), left_image)
@@ -91,9 +101,9 @@ def process_video(
     print(f"Saved {save_count} frames.")
 
 
-@click.command()
-@click.argument("video_path")
-@click.argument("output_dir_name")
+@click.group()
+@click.option("--input_video", type=click.Path(), required=True)
+@click.option("--output_dir", type=click.Path())
 @click.option("-l", "--save_frames", is_flag=True, help="Save frames")
 @click.option(
     "-s", "--start_ts", default="00:00:00", help="Start time in HH:MM:SS format"
@@ -101,27 +111,56 @@ def process_video(
 @click.option("-e", "--end_ts", default="00:00:00", help="End time in HH:MM:SS format")
 @click.option("-d", "--downsample_factor", default=1, help="Downsample factor")
 @click.pass_context
-def main(
-    context,
-    video_path: str,
-    output_dir_name: str,
+def cli(
+    ctx: click.Context,
+    input_video: str,
+    output_dir: bool,
     save_frames: bool,
     start_ts: str,
     end_ts: str,
     downsample_factor: int,
 ):
-    print(video_path)
-    video_path: Path = Path(video_path)
-    process_video(
-        context,
-        video_path,
-        output_dir_name,
-        save_frames,
-        start_time=start_ts,
-        end_time=end_ts,
+    input_video = Path(input_video) if input_video is not None else None
+    output_dir = Path(output_dir) if output_dir is not None else None
+
+    ctx.obj = MyContext(
+        input_video=input_video,
+        output_dir=output_dir,
+        save_frames=save_frames,
+        start_ts=start_ts,
+        end_ts=end_ts,
         downsample_factor=downsample_factor,
     )
 
 
+@cli.command()
+@click.pass_obj
+def run(ctx: MyContext):
+    print(f"Loading video {ctx.input_video}...")
+
+    if not ctx.input_video.exists():
+        raise Exception(f"Error: {ctx.input_video} does not exist.")
+
+    if ctx.output_dir is None:
+        ctx.output_dir = ctx.input_video.parent / "left"
+        ctx.output_dir.mkdir(exist_ok=True)
+    else:
+        ctx.output_dir.mkdir(exist_ok=True)
+
+    video_to_frames(ctx)
+
+
+# Entry point
 if __name__ == "__main__":
-    main()
+    """
+    run with
+
+    python video_to_frames.py --input-video . --output-dir ../../ run
+
+    see:
+    https://click.palletsprojects.com/en/stable/api/#context
+
+    or chat GPT chat.
+    https://chatgpt.com/share/67f7be66-f0f4-8000-a4c7-b70dac9a91c9
+    """
+    cli()

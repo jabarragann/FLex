@@ -14,6 +14,8 @@ class MyContext:
 def video_to_frames(
     ctx: MyContext, max_res: int = 0, target_fps: int = -1, process_length: int = -1
 ):
+    """Taken from video depth anything"""
+
     cap = cv2.VideoCapture(str(ctx.input_video))
 
     original_fps = cap.get(cv2.CAP_PROP_FPS)
