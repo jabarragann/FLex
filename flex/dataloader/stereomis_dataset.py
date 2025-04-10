@@ -323,12 +323,16 @@ class StereoMISDataset(Dataset):
                 bwd_mask = (
                     self.transform(bwd_mask).view(1, -1).permute(1, 0)
                 )  # .reshape(-1, 1)
+
+                ## JA: bwd_mask and fwd_mask are binary integers to indicate that the last frame doesn't have a bwd flow and the last a fwd flow.
                 fwd_mask2 = torch.full_like(fwd_mask, frame["fwd_mask"])
                 bwd_mask2 = torch.full_like(bwd_mask, frame["bwd_mask"])
                 fwd_mask = torch.logical_and(fwd_mask, fwd_mask2)
                 bwd_mask = torch.logical_and(bwd_mask, bwd_mask2)
                 # fwd_mask = torch.full_like(fwd_mask, frame['fwd_mask'])
                 # bwd_mask = torch.full_like(bwd_mask, frame['bwd_mask'])
+
+                ## JA: no idea what are these.
                 self.prev_test.append(torch.tensor([frame["prev_test"]]))
                 self.post_test.append(torch.tensor([frame["post_test"]]))
 
@@ -364,6 +368,7 @@ class StereoMISDataset(Dataset):
         if self.split == "train" and self.load_flow:
             self.prev_test = torch.stack(self.prev_test)
             self.post_test = torch.stack(self.post_test)
+
         #  self.is_stack stacks all images into a big chunk, with shape (N, H, W, 3).
         #  Otherwise, all images are kept as a set of rays with shape (N_s, 3), where N_s = H * W * N
         if not self.is_stack:

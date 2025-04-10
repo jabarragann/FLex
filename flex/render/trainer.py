@@ -546,6 +546,12 @@ class Trainer:
     def sample_data(self, train_dataset, test_dataset, iteration):
         """
         Sample a batch of data from the dataset.
+
+        Possible sample schemes:
+        # sample rays: shuffle all the rays of training dataset and sampled a batch of rays from them.
+        # sample images: randomly pick one image from the training dataset and sample a batch of rays from all the rays of the image.
+        # Sample hierch: hierarchical sampling from dyNeRF: hierachical sampling involves three stages of samplings.
+
         """
         train_depth = None
         tool_mask = None
@@ -733,6 +739,7 @@ class Trainer:
                 train_test_poses = test_ratio > random.uniform(0, 1)
             else:
                 train_test_poses = False
+
             if train_test_poses:
                 actual_test_frames = np.arange(0, test_dataset.poses.shape[0]) * 8
                 active_test_frames_idxs = actual_test_frames[
@@ -827,7 +834,6 @@ class Trainer:
                     bwd_mask = data["bwd_mask"].to(self.device).view(-1, 1)[select_inds]
 
                 ray_idx = select_inds
-
             else:
                 img_i = self.sampler.nextids()
                 if len(img_i) < self.cfg.optim.num_s_imgs:
@@ -945,6 +951,7 @@ class Trainer:
 
                 ray_idx = select_inds
                 img_idxs = img_i
+
         # hierarchical sampling from dyNeRF: hierachical sampling involves three stages of samplings.
         elif self.cfg.data.datasampler_type == "hierach":
             # Stage 1: randomly sample a single image from an arbitrary camera.
