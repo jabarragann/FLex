@@ -41,8 +41,6 @@ def frame_calculation(start_time: str, end_time: str, video_cv2: VideoOpenCV):
         print("Error: Start or end time exceeds video duration.")
         return
 
-    print(f"Start frame: {start_frame}, End frame: {end_frame}")
-
     return start_frame, end_frame
 
 

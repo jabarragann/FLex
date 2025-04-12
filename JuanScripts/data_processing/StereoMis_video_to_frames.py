@@ -1,3 +1,4 @@
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -82,8 +83,8 @@ def video_to_frames(
             # Save extracted frames
             if ctx.save_frames:
                 if (frame_count - start_frame) % ctx.downsample_factor == 0:
-                    left_filename = left_dir / f"left_{save_count:04d}.png"
-                    right_filename = right_dir / f"right_{save_count:04d}.png"
+                    left_filename = left_dir / f"left_{frame_count:04d}.png"
+                    right_filename = right_dir / f"right_{frame_count:04d}.png"
                     cv2.imwrite(str(left_filename), left_image)
                     cv2.imwrite(str(right_filename), right_image)
                     save_count += 1
