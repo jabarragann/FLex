@@ -36,9 +36,11 @@ class CameraModel:
         if fmt != "cv2":
             raise NotImplementedError("Only opencv format is supported")
 
+        # fmt: off # Just realized that this is not doing anything.
+        # Juan: Either the camera is already in opencv format or the opencv format is not required.
         blender2opencv = np.array(
             [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
-        )
+        )  # fmt: on
 
         pose_blender = c2w @ blender2opencv
         pose_blender = torch.FloatTensor(pose_blender)

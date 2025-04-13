@@ -3,6 +3,18 @@ import torch
 from lietorch import SE3
 
 
+def plot_camera_orientation(ax, pose, scale=0.1):
+    """Plot a single camera pose with coordinate axes."""
+    origin = pose[:3, 3]
+    x_axis = pose[:3, 0] * scale
+    y_axis = pose[:3, 1] * scale
+    z_axis = pose[:3, 2] * scale
+
+    ax.quiver(*origin, *x_axis, color="r", length=scale)
+    ax.quiver(*origin, *y_axis, color="g", length=scale)
+    ax.quiver(*origin, *z_axis, color="b", length=scale)
+
+
 def plot_3d_trajectory(poses, time_stamps):
     import matplotlib.pyplot as plt
 
@@ -20,6 +32,10 @@ def plot_3d_trajectory(poses, time_stamps):
     # Plot the trajectory
     ax.plot(x, y, z, label="3D Trajectory", color="b")
 
+    # plot orientations
+    for i in range(0, len(poses), 20):
+        plot_camera_orientation(ax, poses[i], scale=2.0)
+
     # Add labels
     ax.set_xlabel("X Axis")
     ax.set_ylabel("Y Axis")
@@ -33,7 +49,26 @@ def plot_3d_trajectory(poses, time_stamps):
     plt.show()
 
 
-def read_freiburg(path: str, ret_stamps=False, no_stamp=False, to_SE3=False):
+def read_freiburg(
+    path: str, ret_stamps=False, no_stamp=False, to_SE3=False, relative=False
+):
+    """Read poses
+
+    Parameters
+    ----------
+    path : str
+    ret_stamps : bool, optional
+    no_stamp : bool, optional
+    to_SE3 : bool, optional
+       Convert to lietorch tensor else numpy, by default False
+    relative : bool, optional
+        Express with respect to first camera frame., by default True
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
     with open(path) as f:
         data = f.read()
         lines = data.replace(",", " ").replace("\t", " ").split("\n")
@@ -67,6 +102,10 @@ def read_freiburg(path: str, ret_stamps=False, no_stamp=False, to_SE3=False):
         trans = torch.from_numpy(trans)
         quat = torch.from_numpy(quat)
         pose_se3 = SE3.InitFromVec(torch.cat((trans, quat), dim=-1))
+
+        if relative:
+            raise (NotImplementedError)
+
     else:  # Keep as numpy
         from scipy.spatial.transform import Rotation as R
 
@@ -76,15 +115,22 @@ def read_freiburg(path: str, ret_stamps=False, no_stamp=False, to_SE3=False):
         pose_se3[:, :3, 3] = trans
         pose_se3[:, 3, 3] = 1.0
 
+        if relative:
+            T_1w = np.linalg.inv(pose_se3[0])
+
+            # Didn't work the einsum
+            # pose_se3_v1 = np.einsum("ijk,ik->ij", T_1w, pose_se3)
+            pose_se3 = T_1w @ pose_se3
+            # assert np.isclose(T_1w @ pose_se3[5], pose_se3_v2[5]).all()
+
     if ret_stamps:
         return pose_se3, time_stamp
     else:
         return pose_se3
 
 
-if __name__ == "__main__":
-    # Example usage
-    path = "/home/juan95/JuanData/StereoMIS/P2_8/groundtruth.txt"
+def test_scipy_np_poses_equivalence(path):
+
     pose_se3, stamps = read_freiburg(path, ret_stamps=True, to_SE3=True)
 
     pose_scipy, stamps = read_freiburg(path, ret_stamps=True, to_SE3=False)
@@ -102,6 +148,32 @@ if __name__ == "__main__":
 
     if np.all(all):
         print("All values correct")
+    assert np.all(all)
 
-    plot_3d_trajectory(pose_scipy[:700], stamps)
-    print(pose_scipy[:8, :3, 3])
+
+np.set_printoptions(precision=4, suppress=True)
+
+if __name__ == "__main__":
+    # Example usage
+    path = "/home/juan95/JuanData/StereoMIS/P2_8/groundtruth.txt"
+
+    test_scipy_np_poses_equivalence(path)
+
+    pose_normalized, stamps = read_freiburg(
+        path, ret_stamps=True, to_SE3=False, relative=True
+    )
+    plot_3d_trajectory(pose_normalized[:700], stamps)
+
+    print("First pose")
+    print(pose_normalized[0])
+    print("Second pose")
+    print(pose_normalized[1])
+
+    T_12 = pose_normalized[1]
+    T_21 = np.linalg.inv(T_12)
+    T_13 = pose_normalized[2]
+
+    T_23 = T_21 @ T_13
+    T_13_calc = T_12 @ T_23
+
+    print(np.isclose(T_13, T_13_calc))
