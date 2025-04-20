@@ -99,14 +99,18 @@ def create_point_cloud_with_rays(
     # Remove points with zero depth
     valid = depth > 0
     u, v, depth = u[valid], v[valid], depth[valid]
+    colors = rgb[v, u] / 255.0  # Normalize to [0,1]
 
+    # Move to pixel center
+    u = u + 0.5
+    v = v + 0.5
+
+    # backproject to 3D
     x = (u - K.cx) * depth / K.fx
     y = (v - K.cy) * depth / K.fy
     z = depth
 
     points_3d = np.vstack((x, y, z)).T  # Shape: (N, 3)
-
-    colors = rgb[v, u] / 255.0  # Normalize to [0,1]
 
     # Create Open3D PointCloud
     pcd = o3d.geometry.PointCloud()
@@ -185,7 +189,7 @@ def compare_projected_pc(K: PinHoleCameraParams, pc1, pc2, basedir, frame_id):
 def main():
     basedir = Path(__file__).resolve().parent
 
-    frame_id = 14  # 379 or 14
+    frame_id = 298  # 379 or 14 or 298 (StereoMIS)
     rgb_path = f"./sample_data/pc_depth_anything/frame_{frame_id:04d}.png"
     depth_path = f"./sample_data/pc_depth_anything/depth_{frame_id:04d}.png"
     rgb = imageio.imread(basedir / rgb_path)
@@ -194,7 +198,6 @@ def main():
     disparity_normalized = (
         disparity / 65535.0
     ) + 1  # Normalize to [1, 2] to avoid div by 0.
-
     scale = 1000  # Scale to see mesh in Open3D
     depth = scale / disparity_normalized
 
