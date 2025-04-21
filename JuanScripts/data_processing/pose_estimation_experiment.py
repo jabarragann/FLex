@@ -1,4 +1,4 @@
-from collections import namedtuple
+# from collections import namedtuple
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -7,7 +7,7 @@ import imageio.v2 as imageio
 import numpy as np
 from matplotlib import pyplot as plt
 from natsort import natsorted
-from PoseUtils import plot_3d_trajectory, read_freiburg
+from PoseUtils import read_freiburg
 
 
 def visualize_two_rgb(img1, img2):
@@ -188,15 +188,36 @@ def manually_seleted_keypoints():
 
     # Keypoints for frame 0
     # Keypoints are in (x,y) coordinates
-    kp1 = [[818, 640], [610, 950], [643, 974], [553, 680], [569, 717], [675, 818], [731, 786], [699, 440]]  # fmt: skip
+    kp1 = [[818, 640], [610, 950], [643, 974], [553, 680], [569, 717], [675, 818], [731, 786], [699, 440],
+           [293, 569], [458, 512]]  # fmt: skip
     # Keypoints for frame 40
-    kp2 = [[918, 363], [654, 720], [687, 747], [606, 431], [619, 473], [729, 587], [795, 554], [802, 118]]  # fmt: skip
+    kp2 = [[918, 363], [654, 720], [687, 747], [606, 431], [619, 473], [729, 587], [795, 554], [802, 118],
+           [326, 264], [515, 207]]  # fmt: skip
 
-    kp1 = np.array(kp1)
-    kp2 = np.array(kp2)
+    kp1 = np.array(kp1).astype(float)
+    kp2 = np.array(kp2).astype(float)
     return kp1, kp2
 
 
+def fundamental_matrix_error(F, inlier_pts1, inlier_pts2):
+    ones = np.ones((inlier_pts1.shape[0], 1))
+    pts1_hom = np.hstack([inlier_pts1, ones])  # Convert to homogeneous coordinates
+    pts2_hom = np.hstack([inlier_pts2, ones])
+
+    errors = np.abs(np.sum(pts2_hom.T * (F @ pts1_hom.T), axis=0))
+    mean_error = np.mean(errors)
+    std_error = np.std(errors)
+    max_error = np.max(errors)
+
+    print("Fundamental matrix error report:")
+    print(f"Error: {mean_error: 0.5f}\u00b1{std_error: 0.5f}")
+    print(f"Max error: {max_error: 0.5f} min error: {np.min(errors): 0.5f}")
+
+    return mean_error, std_error
+
+
+##### Experiment 3
+###################
 def find_registration_from_2_frames(dataset: Dataset):
     kp1, kp2 = manually_seleted_keypoints()
 
@@ -252,6 +273,84 @@ def find_registration_from_2_frames(dataset: Dataset):
     print(R)
     print(t)
     print(np.linalg.inv(pose))
+
+
+##### Experiment 3
+###################
+def find_registration_from_2_frames_with_fundamental_mat(dataset: Dataset):
+    kp1, kp2 = manually_seleted_keypoints()
+
+    frame_id = 0
+    rgb1 = dataset.rgb_frames[frame_id]
+    # depth1 = dataset.depth_frames[frame_id]
+
+    frame_id = 40
+    rgb2 = dataset.rgb_frames[frame_id]
+    # depth2 = dataset.depth_frames[frame_id]
+    # pose = dataset.c2w[frame_id]
+
+    W, H = rgb1.shape[1], rgb1.shape[0]
+    K_inst = PinHoleCameraParams(
+        fx=999,
+        fy=999,
+        cx=W / 2,
+        cy=H / 2,
+        W=W,
+        H=H,
+    )
+
+    K = np.array(
+        [[K_inst.fx, 0, K_inst.cx], [0, K_inst.fy, K_inst.cy], [0, 0, 1]]
+    ).astype(float)
+
+    ### Experiment 3 - traditional sfm pipeline
+    ##############################
+
+    # Compute the fundamental matrix
+    F, mask = cv2.findFundamentalMat(kp1, kp2, method=cv2.FM_8POINT)
+    fundamental_matrix_error(F, kp1, kp2)
+
+    E = K.T @ F @ K
+
+    # R,T transforms from the first camera's coordinate system to the second camera's coordinate system.
+    retval, R, T, mask = cv2.recoverPose(E, kp1, kp2, K)
+
+    print("Rotation Matrix:\n", R)
+    print("Translation Vector:\n", T)
+
+    ## Triangulate points
+    P1 = K @ np.hstack([np.eye(3), np.zeros((3, 1))])  # Camera 0 is the world frame
+    P2 = K @ np.hstack([R, T])
+    points_4d = cv2.triangulatePoints(P1, P2, kp1.T, kp2.T)
+    points_3d_in_frame0 = points_4d[:3] / points_4d[3]
+    points_3d_in_frame0 = points_3d_in_frame0.T
+
+    # Project points to 2d
+    est_kp1, _ = cv2.projectPoints(
+        points_3d_in_frame0, np.zeros((3, 1)), np.zeros((3, 1)), K, None
+    )
+    est_kp2, _ = cv2.projectPoints(points_3d_in_frame0, R, T, K, None)
+
+    # Reprojection error
+    points_3d_in_frame40 = R @ points_3d_in_frame0.T + T.reshape(-1, 1)
+    points_3d_in_frame40 = points_3d_in_frame40.T
+    est_kp2_2 = project_to_2d(K_inst, points_3d_in_frame40)
+    reproj_error = np.linalg.norm(est_kp2_2 - kp2, axis=1)
+    print(f"reprojection error {np.mean(reproj_error)} ± {np.std(reproj_error)}")
+
+    assert np.all(np.isclose(est_kp2.squeeze(), est_kp2_2))
+
+    ## manually selected keypoints
+    draw_key_points(rgb1, kp1, color=(0, 255, 0))
+    draw_key_points(rgb2, kp2, color=(0, 255, 0))
+    # Reprojected keypoints
+    draw_key_points(rgb1, est_kp1.squeeze(), color=(0, 255, 200))
+    draw_key_points(rgb2, est_kp2.squeeze(), color=(0, 200, 255))
+    visualize_two_rgb(rgb1, rgb2)
+
+    ## Traditional sfm pipeline
+    # Returns points in 3d from matched keypoints and the relative camera pose.
+    return points_3d_in_frame0, R, T
 
 
 def use_gt_to_project_pc_from_frame2_frame(dataset: Dataset):
@@ -324,11 +423,14 @@ if __name__ == "__main__":
 
     dataset = Dataset(img_folder)
 
-    ### Experiment 2
+    ### Experiment 3 - with fundamental matrix
+    find_registration_from_2_frames_with_fundamental_mat(dataset)
+
+    ### Experiment 2 - with depth
     ###############################
     # find_registration_from_2_frames(dataset)
 
     ### Experiment 1 - didn't work
     # Poses scaled might not correspond with the scale of the monodepth.
     ##############################
-    use_gt_to_project_pc_from_frame2_frame(dataset)
+    # use_gt_to_project_pc_from_frame2_frame(dataset)
