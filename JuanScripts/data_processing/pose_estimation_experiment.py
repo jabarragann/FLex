@@ -321,6 +321,7 @@ def find_registration_from_2_frames_with_fundamental_mat(dataset: Dataset):
     ## Triangulate points
     P1 = K @ np.hstack([np.eye(3), np.zeros((3, 1))])  # Camera 0 is the world frame
     P2 = K @ np.hstack([R, T])
+    # Triangulate points is sensitive to data types. Kp1 and kp2 should be float64
     points_4d = cv2.triangulatePoints(P1, P2, kp1.T, kp2.T)
     points_3d_in_frame0 = points_4d[:3] / points_4d[3]
     points_3d_in_frame0 = points_3d_in_frame0.T
