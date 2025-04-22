@@ -29,6 +29,7 @@ def frame_calculation(start_time: str, end_time: str, video_cv2: VideoOpenCV):
     end_tuple = tuple(map(int, end_time.split(":")))
 
     # Convert time to frame numbers
+    # TODO: frames will only be multiples of fps.
     start_frame = (
         int(start_tuple[0] * 3600 + start_tuple[1] * 60 + start_tuple[2])
         * video_cv2.fps
@@ -61,6 +62,7 @@ class VideoOpenCV:
         self.print_info()
 
     def print_info(self):
+        print("video information:")
         print(f"loaded video: {self.video_path}")
         print(f"FPS: {self.fps}")
         print(f"Total frames: {self.total_frames}")

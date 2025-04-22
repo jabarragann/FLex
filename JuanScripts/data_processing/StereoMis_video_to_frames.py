@@ -1,6 +1,7 @@
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Tuple
 
 import click
 import cv2
@@ -17,7 +18,8 @@ class MyContext:
     save_frames: bool
     start_ts: str
     end_ts: str
-    downsample_factor: int
+    sample: int
+    resolution: Tuple[int, int] = (640, 480)
 
 
 def split_frame(frame: np.ndarray):
@@ -59,45 +61,48 @@ def video_to_frames(
     left_writer = imageio.get_writer(left_video_path, fps=30, codec="libx264")
 
     # Set frames
-    frame_count = 0
+    frame_idx = 0
     save_count = 0
     start_frame, end_frame = frame_calculation(ctx.start_ts, ctx.end_ts, video_cv2)
-    video_cv2.set_start_frame(start_frame)
 
     print(f"Start frame: {start_frame}, End frame: {end_frame}")
 
     with tqdm(
         total=video_cv2.total_frames, desc="Processing Video", unit="frame"
     ) as pbar:
-        while frame_count <= end_frame and video_cv2.is_opened():
+        while frame_idx <= end_frame and video_cv2.is_opened():
             ret, frame = video_cv2.get_frame()
             if not ret:
                 break
 
-            if frame_count == 0:
+            if frame_idx == 0:
                 print(frame.shape)
                 cv2.imwrite(str(output_dir / "sample_interlaced_img.png"), frame)
 
             left_image, right_image = split_frame(frame)
 
             # Save extracted frames
-            if ctx.save_frames:
-                if (frame_count - start_frame) % ctx.downsample_factor == 0:
-                    left_filename = left_dir / f"left_{frame_count:04d}.png"
-                    right_filename = right_dir / f"right_{frame_count:04d}.png"
-                    cv2.imwrite(str(left_filename), left_image)
-                    cv2.imwrite(str(right_filename), right_image)
+            if ctx.save_frames and frame_idx >= start_frame:
+                if (frame_idx - start_frame) % ctx.sample == 0:
+                    left_filename = left_dir / f"left_{frame_idx:06d}.png"
+                    right_filename = right_dir / f"right_{frame_idx:06d}.png"
+
+                    left_image_res = cv2.resize(left_image, ctx.resolution)
+                    right_image_res = cv2.resize(right_image, ctx.resolution)
+
+                    cv2.imwrite(str(left_filename), left_image_res)
+                    cv2.imwrite(str(right_filename), right_image_res)
                     save_count += 1
 
             # Write frames to video
             left_image = cv2.cvtColor(left_image, cv2.COLOR_BGR2RGB)
             left_writer.append_data(left_image)
 
-            frame_count += 1
+            frame_idx += 1
             pbar.update(1)
 
     left_writer.close()
-    print(f"Processing complete. Extracted {frame_count} frames.")
+    print(f"Processing complete. Extracted {frame_idx} frames.")
     print(f"Saved frames to {output_dir}")
     print(f"Saved {save_count} frames.")
 
@@ -111,6 +116,7 @@ def video_to_frames(
 )
 @click.option("-e", "--end_ts", default="00:00:00", help="End time in HH:MM:SS format")
 @click.option("-d", "--downsample_factor", default=1, help="Downsample factor")
+@click.option("--resolution", default="640x512", help="Resolution of the saved images")
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -120,9 +126,13 @@ def cli(
     start_ts: str,
     end_ts: str,
     downsample_factor: int,
+    resolution: str,
 ):
     input_video = Path(input_video) if input_video is not None else None
     output_dir = Path(output_dir) if output_dir is not None else None
+
+    resolution = resolution.split("x")
+    res = (int(resolution[0]), int(resolution[1]))
 
     ctx.obj = MyContext(
         input_video=input_video,
@@ -130,7 +140,8 @@ def cli(
         save_frames=save_frames,
         start_ts=start_ts,
         end_ts=end_ts,
-        downsample_factor=downsample_factor,
+        sample=downsample_factor,
+        resolution=res,
     )
 
 
@@ -138,6 +149,7 @@ def cli(
 @click.pass_obj
 def run(ctx: MyContext):
     print(f"Loading video {ctx.input_video}...")
+    print(f"Output directory: {ctx.output_dir}")
 
     if not ctx.input_video.exists():
         raise Exception(f"Error: {ctx.input_video} does not exist.")
@@ -157,6 +169,13 @@ if __name__ == "__main__":
     run with
 
     python video_to_frames.py --input-video . --output-dir ../../ run
+
+    ## Full command to run in bash script
+    python JuanScripts/data_processing/StereoMis_video_to_frames.py \
+        --input_video /home/juan95/JuanData/StereoMIS/P2_8/IFBS_ENDOSCOPE-part0008.mp4 \
+        --output_dir /home/juan95/JuanData/StereoMIS_FLex_juan/P2_8_juan_clip_FLex_juan \
+        -s 00:00:00 -e 00:00:18 --resolution 640x512 --save_frames \
+        run
 
     see:
     https://click.palletsprojects.com/en/stable/api/#context
