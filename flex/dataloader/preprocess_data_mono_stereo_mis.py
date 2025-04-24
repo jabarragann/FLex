@@ -78,7 +78,6 @@ def create_transforms(
         item = {}
         item["file_path"] = str(rgb_paths[i])
         item["transform_matrix"] = poses[i, :, :4].tolist()
-        item["transform_matrix"].append([0, 0, 0, 1])
         item["time"] = float(i) / (len(rgb_paths) - 1)  # correct version
 
         item["depth_file_path"] = str(depth_paths[i])
@@ -260,11 +259,11 @@ def preprocess_data(
 
 def center_poses_0(poses):
     center = poses[..., 3].mean(0)
-    poses[..., 3] = poses[..., 3] - center
+    poses[..., :3, 3] = poses[..., :3, 3] - center[:3]
     max_poses = abs(poses[..., 3]).max(0)
     scale = max_poses.max(0)
     print(f"Max poses along translation axis: {max_poses} and scale value: {scale}")
-    poses[..., 3] = (poses[..., 3]) / scale
+    poses[..., :3, 3] = (poses[..., :3, 3]) / scale
 
     return poses, scale, center
 
