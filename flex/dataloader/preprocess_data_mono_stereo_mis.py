@@ -126,7 +126,7 @@ class CameraModel:
     camera_model: str
 
 
-def create_hexd(
+def preprocess_data(
     scene="23",
     factor=1,
     flow_data=False,
@@ -166,7 +166,8 @@ def create_hexd(
         fwd_paths = sorted((flow_base_path / "fwd").glob("*.png"))
         bwd_paths = sorted((flow_base_path / "bwd").glob("*.png"))
     if tool_mask:
-        tool_mask_paths = sorted(os.listdir(os.path.join(basedir, "masks")))
+        masks_base_path = basedir / "masks"
+        tool_mask_paths = sorted(masks_base_path.glob("*.png"))
 
     # Set camera intrinsics
     H, W, _ = np.array(Image.open(rgb_paths[0])).shape
@@ -205,7 +206,6 @@ def create_hexd(
 
     depth_base_path = basedir / f"{which_cam}_depth/depth_frames"
     depth_file_paths = sorted(depth_base_path.glob("*.png"))
-    tool_mask_paths = depth_file_paths
 
     # create dict for each frame:
     create_transforms(
@@ -291,7 +291,7 @@ if __name__ == "__main__":
         help="set image dimensions, epsecially needed when changing image via cropping etc. to fix calibration file",
     )
     args = parser.parse_args()
-    create_hexd(
+    preprocess_data(
         scene=args.scene,
         factor=args.factor,
         flow_data=args.flow_data,
