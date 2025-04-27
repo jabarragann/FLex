@@ -3,6 +3,7 @@ import math
 import os
 
 import cv2
+import imageio.v2 as imageio
 import numpy as np
 import tifffile as tiff
 import torch
@@ -65,6 +66,20 @@ def mask_specularities(img, mask=None, spec_thr=0.96):
     mask = mask & spec_mask if mask is not None else spec_mask
     mask = cv2.erode(mask.astype(np.uint8), kernel=np.ones((11, 11)))
     return mask
+
+
+def juan_load_disparity(path):
+    disparity = imageio.imread(path)
+    disparity = disparity.astype(np.float32)
+
+    # Image encoded in a 16-bit PNG format
+    disparity_normalized = (
+        disparity / 65535.0
+    ) + 1  # Normalize to [1, 2] to avoid div by 0.
+    scale = 1000  # Scale to see mesh in Open3D
+    depth = scale / disparity_normalized
+
+    return depth
 
 
 class StereoMISDataset(Dataset):

@@ -2238,38 +2238,38 @@ def evaluation_local(
                 else:
                     f.write(f"Index {i}, Trans-Error: {trans_error[i]}\n")
 
-        (
-            ate_rmse,
-            rpe_trans_mean,
-            rpe_rot_mean,
-            trans_error,
-            rpe_trans,
-            rpe_rot,
-        ) = eval_poses(
-            data_dir=cfg.data.datadir,
-            depth_scale=1.0,
-            test_idxs=test_idxs,
-            pred_list=None,
-            delta=1,
-            offset=0,
-        )
+        # (
+        #     ate_rmse,
+        #     rpe_trans_mean,
+        #     rpe_rot_mean,
+        #     trans_error,
+        #     rpe_trans,
+        #     rpe_rot,
+        # ) = eval_poses(
+        #     data_dir=cfg.data.datadir,
+        #     depth_scale=1.0,
+        #     test_idxs=test_idxs,
+        #     pred_list=None,
+        #     delta=1,
+        #     offset=0,
+        # )
 
-        # save metrics!
-        # if cfg.local.use_preprocessed_poses:
-        with open(f"{savePath}/{prefix}_preprocessed_pose_mean.txt", "w") as f:
-            f.write(
-                f"ATE-RMSE: {ate_rmse}, Trans-Error: {trans_error.mean()}, RPE-Trans: {rpe_trans_mean}, RPE-Rot: {rpe_rot_mean}\n"
-            )
-            print(
-                f"ATE-RMSE: {ate_rmse}, Trans-Error: {trans_error.mean()}, RPE-Trans: {rpe_trans_mean}, RPE-Rot: {rpe_rot_mean}"
-            )
-            for i in range(len(trans_error)):
-                if i < (len(trans_error) - 1):
-                    f.write(
-                        f"Index {i}, Trans-Error: {trans_error[i]}, RPE-Trans: {rpe_trans[i]}, RPE-Rot: {rpe_rot[i]}\n"
-                    )
-                else:
-                    f.write(f"Index {i}, Trans-Error: {trans_error[i]}\n")
+        # # save metrics!
+        # # if cfg.local.use_preprocessed_poses:
+        # with open(f"{savePath}/{prefix}_preprocessed_pose_mean.txt", "w") as f:
+        #     f.write(
+        #         f"ATE-RMSE: {ate_rmse}, Trans-Error: {trans_error.mean()}, RPE-Trans: {rpe_trans_mean}, RPE-Rot: {rpe_rot_mean}\n"
+        #     )
+        #     print(
+        #         f"ATE-RMSE: {ate_rmse}, Trans-Error: {trans_error.mean()}, RPE-Trans: {rpe_trans_mean}, RPE-Rot: {rpe_rot_mean}"
+        #     )
+        #     for i in range(len(trans_error)):
+        #         if i < (len(trans_error) - 1):
+        #             f.write(
+        #                 f"Index {i}, Trans-Error: {trans_error[i]}, RPE-Trans: {rpe_trans[i]}, RPE-Rot: {rpe_rot[i]}\n"
+        #             )
+        #         else:
+        #             f.write(f"Index {i}, Trans-Error: {trans_error[i]}\n")
 
     if len(poses_vis) > 0:
         with open(f"{savePath}/{prefix}posesvideo.mp4", "wb") as f:

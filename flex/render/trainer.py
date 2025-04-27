@@ -319,12 +319,13 @@ class Trainer:
 
     def check_new_model(self, total_iteration, last_add_iter, train_dataset):
         create_model = False
+
         if self.refine_model:
             # print('refining', self.n_iters, self.image_bound, self.n_added_frames, not (self.active_frames_bounds[1]<self.total_frames))
             if self.local_iteration[-1] >= self.n_iters:
                 create_model = True
 
-        else:
+        else:  # Still progressive optimization
             frames_left = self.active_frames_bounds[1] < self.total_frames
             dist_to_last_model = torch.norm(self.poses_t[-1] + self.world2hexs[-1])
             # last_pose = torch.cat((sixD_to_mtx(self.poses_rot[-1].clone().detach()), self.poses_t[-1].reshape(3,1).clone().detach()),-1)
@@ -1123,6 +1124,7 @@ class Trainer:
                     train_depth = train_depth.reshape(-1, 1).to(self.device)[
                         select_inds
                     ]
+
         return (
             rays_train,
             rgb_train,
