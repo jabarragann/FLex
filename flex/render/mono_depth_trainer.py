@@ -154,7 +154,6 @@ class MonoDepthTrainer(Trainer):
             start_iter_time = time.time()
 
             if self.cfg.local_models and self.cfg.local.progressive_opt:
-
                 create_new_model, last_add_iter = self.check_new_model(
                     total_iteration, last_add_iter, train_dataset
                 )
@@ -177,7 +176,7 @@ class MonoDepthTrainer(Trainer):
                         self.image_bounds.append(self.image_bound)
                         torch.save(
                             model,
-                            f"{self.logfolder}/{self.cfg.expname}_{(len(self.local_iteration)-1)}.th",
+                            f"{self.logfolder}/{self.cfg.expname}_{(len(self.local_iteration) - 1)}.th",
                         )
                         break
 
@@ -186,7 +185,7 @@ class MonoDepthTrainer(Trainer):
                 rays_train,
                 rgb_train,
                 frame_time,
-                depth,
+                depth_gt,
                 gt_fwd,
                 gt_bwd,
                 fwd_mask,
@@ -295,65 +294,18 @@ class MonoDepthTrainer(Trainer):
                 )
 
             if self.cfg.model.depth_loss and self.cfg.model.urf_depth_loss_weight > 0:
-                """Lidar losses from Urban Radiance Fields (Rematas et al., 2022).
-                Args:
-                    weights: Weights predicted for each sample.
-                    depth: Ground truth depth of rays.
-                    depth_map: Depth prediction from the network.
-                    z_vals: Sampling distances along rays.
-                    sigma: Uncertainty around depth values.
-                """
-                sigma = (
-                    10.0 / self.train_dataset.original_depth_scale
-                )  # 0.01 # default should be ca. 1cm
-                if self.cfg.local.progressive_opt and self.refine_model:
-                    sigma = sigma * self.cfg.optim.lr_decay_target_ratio ** (
-                        self.local_iteration[-1] / self.n_iters
-                    )
-                URF_SIGMA_SCALE_FACTOR = 3.0
-                depth_mask = depth > 0
-                target_dist_scale = 1 / 12000  # avoid exp() explosion
+                depth_mask = depth_gt > 0
 
-                # Expected depth loss
-                expected_depth_loss = (depth - depth_map.unsqueeze(-1)) ** 2
+                expected_depth_loss = (depth_gt - depth_map.unsqueeze(-1)) ** 2
 
-                # Line of sight losses
-                target_distribution = torch.distributions.normal.Normal(
-                    0.0, sigma / URF_SIGMA_SCALE_FACTOR
-                )
-                depth = depth[:, None]
-                dists = z_vals.reshape(1, z_vals.shape[-1], 1).repeat(
-                    depth.shape[0], 1, 1
-                )
-                weights = weights[..., None]
-
-                line_of_sight_loss_near_mask = torch.logical_and(
-                    dists <= depth + sigma, dists >= depth - sigma
-                )
-                line_of_sight_loss_near = (
-                    weights
-                    - target_dist_scale
-                    * torch.exp(target_distribution.log_prob(dists - depth))
-                ) ** 2
-                line_of_sight_loss_near = (
-                    line_of_sight_loss_near_mask * line_of_sight_loss_near
-                ).sum(-2)
-                line_of_sight_loss_empty_mask = dists < depth - sigma
-                line_of_sight_loss_empty = (
-                    line_of_sight_loss_empty_mask * weights**2
-                ).sum(-2)
-                line_of_sight_loss = line_of_sight_loss_near + line_of_sight_loss_empty
-                urf_depth_loss = torch.mean(
-                    (expected_depth_loss + line_of_sight_loss) * depth_mask
-                )
-                total_loss += urf_depth_loss * self.cfg.model.urf_depth_loss_weight
+                monodepth_loss = torch.mean(expected_depth_loss * depth_mask)
+                total_loss += monodepth_loss * self.cfg.model.urf_depth_loss_weight
 
                 summary_writer.add_scalar(
-                    "train/urban_rad_field_depth_loss",
-                    urf_depth_loss.detach().item(),
+                    "train/monodepth_loss",
+                    monodepth_loss.detach().item(),
                     global_step=total_iteration,
                 )
-                weights = weights.reshape(weights.shape[0], weights.shape[1])
 
             # Optical flow loss
             # start_time_train_optical = time.time()
@@ -370,9 +322,10 @@ class MonoDepthTrainer(Trainer):
 
                 # mask out flow into test images
                 if not train_test_poses:
-                    mask_test_prev, mask_test_post = train_dataset.prev_test[
-                        img_idxs
-                    ].to(self.device), train_dataset.post_test[img_idxs].to(self.device)
+                    mask_test_prev, mask_test_post = (
+                        train_dataset.prev_test[img_idxs].to(self.device),
+                        train_dataset.post_test[img_idxs].to(self.device),
+                    )
                     mask_test_prev = ~(mask_test_prev == 1)
                     mask_test_post = ~(mask_test_post == 1)
 
@@ -633,7 +586,7 @@ class MonoDepthTrainer(Trainer):
             iter_time_acc += time.time() - start_iter_time
             if total_iteration % self.cfg.systems.progress_refresh_rate == 0:
                 print(
-                    f"Iteration = {total_iteration}, train_psnr = {float(np.mean(PSNRs)):.2f}, test_psnr = {float(np.mean(PSNRs_test)):.2f}, mse = {loss:.6f}, iters/sec: {(self.cfg.systems.progress_refresh_rate/iter_time_acc):.2f}"
+                    f"Iteration = {total_iteration}, train_psnr = {float(np.mean(PSNRs)):.2f}, test_psnr = {float(np.mean(PSNRs_test)):.2f}, mse = {loss:.6f}, iters/sec: {(self.cfg.systems.progress_refresh_rate / iter_time_acc):.2f}"
                 )
                 PSNRs = []
                 iter_time_acc = 0.0
@@ -689,7 +642,7 @@ class MonoDepthTrainer(Trainer):
                     # save current model
                     torch.save(
                         model,
-                        f"{self.logfolder}/{self.cfg.expname}_{(len(self.local_iteration)-1)}.th",
+                        f"{self.logfolder}/{self.cfg.expname}_{(len(self.local_iteration) - 1)}.th",
                     )
                 else:
                     poses_R = self.all_poses[:, :3, :3]
@@ -781,7 +734,7 @@ class MonoDepthTrainer(Trainer):
                 if self.cfg.local_models:
                     torch.save(
                         model,
-                        f"{self.logfolder}/{self.cfg.expname}_{(len(self.local_iteration)-1)}.th",
+                        f"{self.logfolder}/{self.cfg.expname}_{(len(self.local_iteration) - 1)}.th",
                     )
                     if self.cfg.local.progressive_opt:
                         # Save rotation and translation matrices:

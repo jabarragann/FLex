@@ -116,9 +116,6 @@ class MonoDepthLoader:
     def mask_invalid_values(disparity_map, threshold=1e-3):
         disparity_map[disparity_map < threshold] = -1
 
-        num_invalid = np.sum(disparity_map < 0).item()
-        print(f"Number of invalid values in disparity map: {num_invalid}")
-
         return disparity_map
 
     def load_depth(self, path):
@@ -543,6 +540,8 @@ class StereoMISDataset(Dataset):
 
         print(f"Max Depth: {torch.max(self.all_depths)}")
         print(f"Min Depth: {torch.min(self.all_depths)}")
+        num_invalid = torch.sum(self.all_depths < 0)
+        print(f"Number of invalid values in disparity map: {num_invalid}")
         if self.load_flow:
             print(f"Max F Flow: {torch.max(self.all_fwd)}")
             print(f"Min F Flow: {torch.min(self.all_fwd)}")

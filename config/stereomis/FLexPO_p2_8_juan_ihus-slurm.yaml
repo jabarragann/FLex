@@ -62,7 +62,7 @@ data:
   datasampler_type: "images" #"images" #"hierach" #"rays"
 
 optim:
-  n_iters: 10 #100 # local models iters per frame
+  n_iters: 100 #100 # local models iters per frame
   lr_decay_type: "exp"
   batch_size: 4096
   num_s_imgs: 16 #16 when pose optim else 1 for speed
@@ -79,7 +79,7 @@ local:
   n_init_frames: 5
   use_preprocessed_poses: False
   n_overlap: 4 #30
-  add_frames_every: 10 #100
+  add_frames_every: 100 #100
   use_camera_momentum: False
 
 render_test: True
