@@ -84,12 +84,18 @@ class MonoDepthLoader:
     ORIGINAL DISPARITY BY MONO-DEPTH
 
                     min        max
-    ├────────────────┼──────────┼─►►
+    ├────────────────│──────────┼─►►
+                     │          │
+    ┌────────────────┘          │
+    │                           │
+    │            ┌──────────────┘
+    ▼            ▼
+    │────────────│────────────────►►
+    │            │
+    0.0          1.0 * 65535
 
-    NORMALIZED STORED IN 16 BIT PNG IMAGES
-
-    0.0          1.0
-    ├────────────┼─────────────────►►
+    NORMALIZED DISPARITY IN
+    16 BIT IMAGES
 
     """
 
@@ -264,9 +270,9 @@ class StereoMISDataset(Dataset):
 
         if self.cfg.debug_mode:
             if self.split == "train":
-                self.meta["frames"] = self.meta["frames"][:10]  # only debug
+                self.meta["frames"] = self.meta["frames"][:50]  # only debug
             else:
-                self.meta["frames"] = self.meta["frames"][:2]  # only debug
+                self.meta["frames"] = self.meta["frames"][:6]  # only debug
             print("Debug Mode activated!")
 
         w, h = self.meta["w"], self.meta["h"]

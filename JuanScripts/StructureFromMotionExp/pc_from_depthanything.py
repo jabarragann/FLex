@@ -34,6 +34,9 @@ class PinHoleCameraParams:
 def point_cloud_to_rgb_no_zbuffer(
     points: np.ndarray, colors: np.ndarray, K: PinHoleCameraParams
 ):
+
+    assert colors.dtype == np.uint8, "Colors should be in uint8 format"
+
     # Filter out points behind the camera
     valid = points[:, 2] > 0
     points = points[valid]
@@ -88,9 +91,7 @@ def create_point_cloud_with_open3d(
     return pcd
 
 
-def create_point_cloud_with_rays(
-    K: PinHoleCameraParams, rgb, depth, basedir, frame_id: int
-):
+def rays_to_pc(rgb, depth, K):
     u, v = np.meshgrid(np.arange(K.W), np.arange(K.H))
     u = u.flatten()
     v = v.flatten()
@@ -112,13 +113,7 @@ def create_point_cloud_with_rays(
 
     points_3d = np.vstack((x, y, z)).T  # Shape: (N, 3)
 
-    # Create Open3D PointCloud
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points_3d)
-    pcd.colors = o3d.utility.Vector3dVector(colors)
-    o3d.io.write_point_cloud(basedir / f"outputs/frame_{frame_id:04d}_pc_rays.ply", pcd)
-
-    return pcd
+    return points_3d, colors
 
     ## Optionally it could be implemented with matrix multiplication
     # K = np.array([[fx, 0, cx],
@@ -129,6 +124,20 @@ def create_point_cloud_with_rays(
     # # Compute 3D points using inverse projection
     # points_3d = np.linalg.inv(K) @ pixels_h * depth  # Shape: (3, N)
     # points_3d = points_3d.T  # Convert to (N, 3)
+
+
+def create_point_cloud_with_rays(
+    K: PinHoleCameraParams, rgb, depth, basedir, frame_id: int
+):
+    points_3d, colors = rays_to_pc(rgb, depth, K)
+
+    # Create Open3D PointCloud
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points_3d)
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+    o3d.io.write_point_cloud(basedir / f"outputs/frame_{frame_id:04d}_pc_rays.ply", pcd)
+
+    return pcd
 
 
 def visualize_rgb_and_depth(rgb, depth):
