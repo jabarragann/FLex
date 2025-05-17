@@ -11,9 +11,7 @@ class MyContext:
     output_dir: Path
 
 
-def video_to_frames(
-    ctx: MyContext, max_res: int = 0, target_fps: int = -1, process_length: int = -1
-):
+def video_to_frames(ctx: MyContext, max_res: int = 0, target_fps: int = -1):
     """Taken from video depth anything"""
 
     cap = cv2.VideoCapture(str(ctx.input_video))
@@ -28,7 +26,6 @@ def video_to_frames(
         width = round(original_width * scale)
 
     fps = original_fps if target_fps < 0 else target_fps
-
     stride = max(round(original_fps / fps), 1)
 
     # frames = []
@@ -36,23 +33,21 @@ def video_to_frames(
     while cap.isOpened():
         ret, frame = cap.read()
 
-        if not ret or (process_length > 0 and frame_count >= process_length):
-            break
-
-        if frame_count % stride == 0:
-            # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
-
+        if frame_count % stride == 0 and ret:
             if max_res > 0 and max(original_height, original_width) > max_res:
                 frame = cv2.resize(frame, (width, height))  # Resize frame
 
-            # frames.append(frame)
             cv2.imwrite(
-                str(ctx.output_dir / f"frame_{frame_count:04d}.png"),
+                str(ctx.output_dir / f"frame_{frame_count:06d}.png"),
                 frame,
             )
+        else:
+            break
 
         frame_count += 1
+        print("debug frame_count", frame_count)
 
+    print(f"Extracted {frame_count} frames from {ctx.input_video}.")
     cap.release()
 
 
@@ -77,6 +72,7 @@ def run(ctx: MyContext):
         ctx.output_dir = ctx.input_video.parent / "frames"
         ctx.output_dir.mkdir(exist_ok=True)
     else:
+        ctx.output_dir = Path(ctx.output_dir)
         ctx.output_dir.mkdir(exist_ok=True)
 
     video_to_frames(ctx)
